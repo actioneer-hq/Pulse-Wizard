@@ -39,6 +39,16 @@ export const blobJob: Step = {
     const configPath = join(artifact, "storage-config.json");
     if (!existsSync(configPath)) throw new WizardError("agent did not produce storage-config.json");
     const config = JSON.parse(await readFile(configPath, "utf8"));
+
+    // The agent reports no blob storage in this repo (e.g. it streams telemetry live) → nothing to
+    // register. Don't PUT an empty config.
+    if (!config?.provider || !config?.descriptor) {
+      ui.note(
+        `No blob storage found to configure${config?.reason ? ` — ${config.reason}` : "."}`,
+        "Audio storage",
+      );
+      return;
+    }
     await pulse.putBlobConfig(config);
     ui.note("Registered storage config.", "Audio storage");
   },

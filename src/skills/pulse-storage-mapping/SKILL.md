@@ -23,6 +23,9 @@ identity. Never infer speaker identity from channel position.
 Do not read or return credential values. Identify only the credential field names Pulse must ask the
 developer to provide.
 
+**Stay local.** Work only from the producer repo and this skill's references — no web search, no
+external docs, no MCP servers, and do not read files outside the repo and the artifact directory.
+
 ## Supported providers
 
 - `s3_compatible`: AWS S3, R2, MinIO, B2, Spaces, Wasabi, Ceph, and GCS through S3 interoperability.

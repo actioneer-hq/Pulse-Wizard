@@ -32,6 +32,11 @@ Never read `.env` values, credentials, unrelated conversation content, or unrela
 code. Report when source semantics and captured payloads disagree. Write generated artifacts only
 to the artifact directory supplied by the wizard; do not add mapping files to the customer's repo.
 
+**Stay local.** Everything you need is the producer repo plus this skill's `references/`. Do NOT use
+web search, external documentation, or MCP servers, and do NOT read files outside the producer repo
+and the artifact directory. If the producer's dialect is unfamiliar, infer it from *their* source and
+sample traces — not from the internet.
+
 ## Load the contract
 
 Before writing the mapping, read:
@@ -57,19 +62,10 @@ not evidence of equivalent semantics.
 5. Map canonical attributes and content. Convert canonical latency attributes to seconds and all
    span/event times to seconds from root start.
 6. Preserve raw span names and useful unmapped attributes. Put conversation text in `content`.
-7. Evaluate against every sample and run:
-
-   ```bash
-   node <skill-dir>/scripts/validate-mapping.mjs \
-     <artifact-dir>/mapping.jsonata <sample-otlp.json> \
-     <artifact-dir>/canonical-trace.json <artifact-dir>/coverage.json
-   ```
-
-   The wizard supplies absolute values for `<skill-dir>` and `<artifact-dir>` when invoking the
-   agent. Do not guess either path.
-
-8. Fix every validation error. Review warnings and metric coverage against producer source.
-9. Register only after validation passes.
+7. Mentally check the mapping against the canonical contract and every sample: valid stages, explicit
+   `turn_id` on every turn-stage span, seconds-from-start times, canonical attribute names/units, and
+   content in the right place. The **wizard** runs `scripts/validate-mapping.mjs` on your output and
+   rejects it if anything is wrong — so make the deliverables correct; you do not run the validator.
 
 ## Non-negotiable rules
 
@@ -96,13 +92,14 @@ Return these artifacts to the wizard:
 - `integration.json`: `{ "framework", "language", "use_case" }`. `use_case` is a short (<=120 char),
   generic downstream **market** use-case the agent serves (e.g. "outbound appointment reminders for
   clinics") — NO company/product/person names, NO code, NO PII; `"unknown"` if you can't tell.
-- `coverage.json`: validator output with available, degraded, unavailable, and untested inputs.
 - `mapping-notes.md`: concise evidence for mappings, tested scenarios, and unavailable signals.
 
+(The wizard runs the validator and writes `canonical-trace.json` + `coverage.json` itself — you don't.)
 Do not produce storage configuration here. That belongs to `pulse-storage-mapping`.
 
 ## Completion gate
 
-A mapping is ready only when all samples validate without errors, every recognized turn-stage span
-is correlated, every time unit is proven, each mapped semantic cites evidence, missing behavioral
-scenarios are disclosed, and the coverage report matches what the traces honestly support.
+A mapping is ready only when it is correct against the canonical contract for every sample: every
+recognized turn-stage span is correlated with an explicit `turn_id`, every time unit is proven,
+each mapped semantic cites evidence, and missing behavioral scenarios are disclosed. The wizard's
+validator is the authority — produce deliverables that pass it.

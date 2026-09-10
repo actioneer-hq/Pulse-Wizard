@@ -5,6 +5,6 @@ export const outro: Step = {
   id: "outro",
   title: "Done",
   async run() {
-    ui.outro("All set — that's the skeleton for now. More coming soon.");
+    ui.outro("All set. Your agent is wired into Pulse — send it some traffic and watch the calls roll in.");
   },
 };

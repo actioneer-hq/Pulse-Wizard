@@ -45,7 +45,7 @@ describe("ClaudeCodeDriver.run", () => {
 
     expect(res.text).toBe("all done");
     expect(res.filesEdited).toEqual(["/repo/.pulse/artifacts/otlp/mapping.jsonata"]);
-    expect(events).toContain("tool:Write");
+    expect(events).toContain("tool:Write /repo/.pulse/artifacts/otlp/mapping.jsonata");
     expect(events).toContain("text:working");
 
     const { cmd, args } = calls[0]!;

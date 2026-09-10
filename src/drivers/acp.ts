@@ -80,7 +80,15 @@ export async function runAcpSession(
         opts.onEvent?.({ kind: "text", message: content.text });
       }
     } else if (kind === "tool_call" || kind === "tool_call_update") {
-      opts.onEvent?.({ kind: "tool", message: String(update.title ?? update.toolCallId ?? kind) });
+      // Prefer the agent's own human title; else compose "kind path" (like the other drivers) from
+      // the reported file locations / rawInput; else fall back to the id or the update kind.
+      const locs = (update.locations ?? []) as Array<{ path?: string }>;
+      const path =
+        locs.find((l) => typeof l.path === "string")?.path ??
+        (update.rawInput as { path?: string } | undefined)?.path;
+      const composed = [update.kind, path].filter(Boolean).join(" ").trim();
+      const message = update.title ?? (composed || update.toolCallId) ?? kind;
+      opts.onEvent?.({ kind: "tool", message: String(message) });
     }
   });
 

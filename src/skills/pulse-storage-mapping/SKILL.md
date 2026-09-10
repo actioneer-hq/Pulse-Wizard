@@ -105,6 +105,16 @@ unknown, report the runtime blocker; do not generate a configuration that silent
 
 ## Credential fields
 
+`cred_spec` is a list of field descriptors. **Each entry MUST use these exact keys** (Pulse reads
+`name` and `secret`; a `field` key or a missing `name` is wrong):
+
+```jsonc
+{ "name": "secret_access_key", "label": "Secret access key", "type": "password", "secret": true }
+```
+
+`type` is `text` or `password`; `secret: true` marks values Pulse encrypts and never echoes. Put the
+field names only in `cred_spec` — never real values (leave `credentials` as `{}`).
+
 For `s3_compatible`, request only what the environment needs: `access_key_id`,
 `secret_access_key`, `region`, and optional `endpoint_url`. The runtime default credential chain may
 remove the need for explicit keys.

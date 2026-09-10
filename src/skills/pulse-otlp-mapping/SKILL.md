@@ -1,4 +1,17 @@
-# SKILL — Author a Pulse OTLP → canonical Trace mapping (JSONata)
+---
+name: pulse-otlp-mapping
+description: >-
+  Use when onboarding a voice agent to Pulse whose OTLP dialect Pulse doesn't natively support.
+  Guides writing ONE JSONata expression that converts the producer's OpenTelemetry payloads into
+  Pulse's canonical Trace shape, so Pulse's fixed metric engine can compute the dashboard. Read the
+  producer's source to learn what it emits, then map/derive it. Covers the canonical Trace schema and
+  the closed attribute vocabulary the engine reads, stage and turn-grouping semantics, mapping tricks
+  (map-by-meaning, stage-aware ttfb→ttft, expanding JSON-blob metrics, squeezing implied fields),
+  JSONata idioms, and how to validate and classify the result (sorted / doable / impossible).
+license: MIT
+---
+
+# Author a Pulse OTLP → canonical Trace mapping (JSONata)
 
 > This is the wizard's brain. It is injected as context into whatever coding agent the developer
 > uses (Claude Code / Codex / an ACP agent). Your job, agent, is to read the developer's voice-agent

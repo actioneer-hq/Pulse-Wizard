@@ -44,5 +44,5 @@ src/
   prompts/        @clack/prompts wrapper
   config/         session persistence
   util/           exec, log, errors
-  skill/          SKILL.md (the mapping playbook) — added next
+  skills/         Agent Skills bundled as context (pulse-otlp-mapping/SKILL.md)
 ```

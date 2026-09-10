@@ -62,10 +62,28 @@ not evidence of equivalent semantics.
 5. Map canonical attributes and content. Convert canonical latency attributes to seconds and all
    span/event times to seconds from root start.
 6. Preserve raw span names and useful unmapped attributes. Put conversation text in `content`.
-7. Mentally check the mapping against the canonical contract and every sample: valid stages, explicit
-   `turn_id` on every turn-stage span, seconds-from-start times, canonical attribute names/units, and
-   content in the right place. The **wizard** runs `scripts/validate-mapping.mjs` on your output and
-   rejects it if anything is wrong — so make the deliverables correct; you do not run the validator.
+7. Mentally check the mapping against the canonical contract and every sample. The **wizard** runs
+   `scripts/validate-mapping.mjs` on your output and rejects it if anything is wrong — so make the
+   deliverables correct; you do not run the validator.
+
+## Pre-finish checklist (the validator enforces exactly these — check every one before writing)
+
+These four are what fail most often. Verify each against the sample:
+
+1. **Arrays, always.** `spans` is a non-empty array and every span's `events` is an array. JSONata
+   returns a *single object* for a one-match path and *nothing* for zero — wrap sequences in `[ ]` so
+   one match still yields an array and none yields `[]`. (Most common failure.)
+2. **`turn_id` on every turn-stage span.** Each `turn`/`speech`/`stt`/`llm`/`tts`/`playout` span needs
+   an explicit `turn_id`, and it must equal some `turn` span's id (the anchor). Nested inputs still need
+   the id written onto every descendant — propagate it, don't rely on parent nesting.
+3. **Times are seconds-from-call-start, as numbers.** Compute `t0` from the root span; every span/event
+   `t_start`/`t_end`/`t` = `(ns - t0) / 1e9`. Never emit raw nanoseconds. Canonical latency attrs
+   (`metrics.ttft`/`ttfb`/`e2e_latency`, `endpointing.delay`) are seconds, as numbers.
+4. **Header strings + ISO timestamps.** `call_id`/`source`/`environment`/`started_at` are non-empty
+   strings; `started_at`/`ended_at` are ISO-8601 strings (e.g. `$fromMillis(ns/1e6)`), not epoch numbers.
+
+Also: every `span_id` is a unique non-empty string, `stage` is one of
+`call|turn|speech|stt|llm|tts|playout|tool|net|unknown`, and `attrs`/`content` are objects (`{}` if empty).
 
 ## Non-negotiable rules
 

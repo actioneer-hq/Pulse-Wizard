@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Step } from "../flow/step.js";
+import { withAgentProgress } from "../prompts/progress.js";
 import { artifactDir, skillDir, storagePrompt } from "../prompts/skills.js";
 import * as ui from "../prompts/ui.js";
 import { WizardError } from "../util/errors.js";
@@ -13,6 +14,7 @@ export const blobJob: Step = {
   title: "Audio storage",
   async run(ctx) {
     if (!ctx.driver || !ctx.pulse) return; // OTLP step already validated these
+    const { driver, pulse } = ctx;
 
     const wants = await ui.select<boolean>({
       message: "Configure audio/recording storage now?",
@@ -26,21 +28,18 @@ export const blobJob: Step = {
     const skill = skillDir("pulse-storage-mapping");
     const artifact = await artifactDir(ctx.repoPath, "storage");
 
-    const s = ui.spinner();
-    s.start("Inspecting your upload config and building the storage descriptor…");
-    await ctx.driver.run(storagePrompt(skill, ctx.repoPath, artifact), {
-      repo: ctx.repoPath,
-      contextFiles: [artifact],
-      onEvent: (e) => {
-        if (e.kind === "tool") s.message(`agent: ${e.message}`);
-      },
-    });
-    s.stop("Agent finished.");
+    await withAgentProgress("Audio storage", Boolean(ctx.flags.verbose), (onEvent) =>
+      driver.run(storagePrompt(skill, ctx.repoPath, artifact), {
+        repo: ctx.repoPath,
+        contextFiles: [artifact],
+        onEvent,
+      }),
+    );
 
     const configPath = join(artifact, "storage-config.json");
     if (!existsSync(configPath)) throw new WizardError("agent did not produce storage-config.json");
     const config = JSON.parse(await readFile(configPath, "utf8"));
-    await ctx.pulse.putBlobConfig(config);
+    await pulse.putBlobConfig(config);
     ui.note("Registered storage config.", "Audio storage");
   },
 };

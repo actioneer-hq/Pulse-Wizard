@@ -35,9 +35,10 @@ export class ClaudeCodeDriver extends HeadlessDriver {
           sink.emit("text", part.text);
         } else if (part.type === "tool_use") {
           const name = part.name as string;
-          sink.emit("tool", name);
-          const input = part.input as { file_path?: string } | undefined;
-          if ((name === "Write" || name === "Edit") && input?.file_path) {
+          const input = (part.input ?? {}) as Record<string, unknown>;
+          const target = input.file_path ?? input.pattern ?? input.command ?? input.path ?? "";
+          sink.emit("tool", `${name} ${String(target)}`.trim());
+          if ((name === "Write" || name === "Edit") && typeof input.file_path === "string") {
             sink.filesEdited.add(input.file_path);
           }
         }

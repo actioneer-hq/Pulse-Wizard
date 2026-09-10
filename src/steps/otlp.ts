@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Step } from "../flow/step.js";
+import { withAgentProgress } from "../prompts/progress.js";
 import { artifactDir, otlpPrompt, skillDir, validatorScript } from "../prompts/skills.js";
 import * as ui from "../prompts/ui.js";
 import { WizardError } from "../util/errors.js";
@@ -15,20 +16,18 @@ export const otlpJob: Step = {
   async run(ctx) {
     if (!ctx.driver) throw new WizardError("no coding agent selected");
     if (!ctx.pulse) throw new WizardError("not connected to Pulse");
+    const { driver, pulse } = ctx;
 
     const skill = skillDir("pulse-otlp-mapping");
     const artifact = await artifactDir(ctx.repoPath, "otlp");
 
-    const s = ui.spinner();
-    s.start("Reading your repo and generating the OTLP mapping…");
-    await ctx.driver.run(otlpPrompt(skill, ctx.repoPath, artifact), {
-      repo: ctx.repoPath,
-      contextFiles: [artifact], // grant the agent write access to the artifact dir
-      onEvent: (e) => {
-        if (e.kind === "tool") s.message(`agent: ${e.message}`);
-      },
-    });
-    s.stop("Agent finished.");
+    await withAgentProgress("OTLP mapping", Boolean(ctx.flags.verbose), (onEvent) =>
+      driver.run(otlpPrompt(skill, ctx.repoPath, artifact), {
+        repo: ctx.repoPath,
+        contextFiles: [artifact], // grant the agent write access to the artifact dir
+        onEvent,
+      }),
+    );
 
     // Gate: re-validate the mapping ourselves before registering.
     const mapping = join(artifact, "mapping.jsonata");
@@ -55,14 +54,14 @@ export const otlpJob: Step = {
     }
 
     const expression = await readFile(mapping, "utf8");
-    const { version } = await ctx.pulse.putOtlpMapping(expression);
+    const { version } = await pulse.putOtlpMapping(expression);
     ui.note(`Registered OTLP mapping (v${version}). Validation passed.`, "OTLP");
 
     // Best-effort: send the agent-inferred market use-case (+ framework/language) to Pulse.
     // Never fail onboarding over this.
     try {
       const meta = JSON.parse(await readFile(join(artifact, "integration.json"), "utf8"));
-      await ctx.pulse.putAgentMeta({
+      await pulse.putAgentMeta({
         use_case: meta.use_case,
         framework: meta.framework,
         language: meta.language,

@@ -62,9 +62,12 @@ not evidence of equivalent semantics.
 5. Map canonical attributes and content. Convert canonical latency attributes to seconds and all
    span/event times to seconds from root start.
 6. Preserve raw span names and useful unmapped attributes. Put conversation text in `content`.
-7. Mentally check the mapping against the canonical contract and every sample. The **wizard** runs
-   `scripts/validate-mapping.mjs` on your output and rejects it if anything is wrong — so make the
-   deliverables correct; you do not run the validator.
+7. **Validate in a loop, in this run.** Run `scripts/validate-mapping.mjs` (the wizard's prompt gives
+   the exact command + absolute paths) on your `mapping.jsonata` + `sample-otlp.json`, read the errors,
+   fix `mapping.jsonata`, and run it again — repeat until it exits 0. Iterating here (warm) is far
+   faster than the wizard re-running you cold. Its dependencies are already installed — do NOT
+   `npm install` or install anything, and do NOT leave the repo. The wizard re-runs the same validator
+   as a final gate, so only finish once it passes clean.
 
 ## Pre-finish checklist (the validator enforces exactly these — check every one before writing)
 

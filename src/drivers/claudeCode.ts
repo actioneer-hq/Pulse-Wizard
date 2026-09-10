@@ -17,10 +17,11 @@ export class ClaudeCodeDriver extends HeadlessDriver {
       "--verbose", // required alongside stream-json in -p mode
       "--permission-mode",
       "acceptEdits", // let it write without interactive prompts (headless)
-      // scope: repo-local file tools only. No Bash/WebSearch (the wizard runs the validator), and
-      // --strict-mcp-config ignores the user's global MCP servers (e.g. deepwiki) so it stays local.
+      // repo-local file tools + Bash (to self-run the validator and iterate in warm context — far
+      // faster than the wizard's cold retry). No WebSearch, and --strict-mcp-config ignores the
+      // user's global MCP servers (e.g. deepwiki) so it stays local.
       "--allowedTools",
-      "Read,Grep,Glob,Write,Edit",
+      "Read,Grep,Glob,Write,Edit,Bash",
       "--strict-mcp-config",
       "--add-dir",
       opts.repo,

@@ -47,7 +47,11 @@ export function otlpPrompt(skill: string, repo: string, artifact: string): strin
     "generic market category, <=120 chars, with NO company/product/person names, NO code, NO PII.",
     'If you cannot tell, use "unknown".',
     "",
-    "Finish only when the skill's validator passes with no errors.",
+    "VALIDATE IN A LOOP before finishing (this is faster than any retry): run",
+    `  node ${validatorScript(skill)} ${join(artifact, "mapping.jsonata")} ${join(artifact, "sample-otlp.json")} ${join(artifact, "canonical-trace.json")} ${join(artifact, "coverage.json")}`,
+    "read its output, fix mapping.jsonata for every reported error, and run it again — repeat until it",
+    "exits 0 with no errors. Its dependencies are already installed: do NOT run npm/npm install, do NOT",
+    "install anything, and do NOT leave the producer repo. Only finish once the validator passes clean.",
   ].join("\n");
 }
 

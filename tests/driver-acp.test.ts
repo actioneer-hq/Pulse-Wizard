@@ -33,6 +33,16 @@ class FakeAgent implements RpcConnection {
           path: this.writePath,
           content: "EXPR",
         });
+        // a tool_call update with no title → progress falls back to "kind path"
+        this.notify("session/update", {
+          sessionId: "s1",
+          update: {
+            sessionUpdate: "tool_call",
+            toolCallId: "tc1",
+            kind: "edit",
+            locations: [{ path: this.writePath }],
+          },
+        });
         this.notify("session/update", {
           sessionId: "s1",
           update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "done" } },
@@ -70,11 +80,17 @@ describe("runAcpSession", () => {
     const dir = await mkdtemp(join(tmpdir(), "pw-acp-"));
     const path = join(dir, "mapping.jsonata");
 
-    const res = await runAcpSession(new FakeAgent(path), "map it", { repo: dir });
+    const events: string[] = [];
+    const res = await runAcpSession(new FakeAgent(path), "map it", {
+      repo: dir,
+      onEvent: (e) => events.push(`${e.kind}:${e.message}`),
+    });
 
     expect(res.text).toBe("done");
     expect(res.filesEdited).toEqual([path]);
     expect(existsSync(path)).toBe(true);
     expect(await readFile(path, "utf8")).toBe("EXPR");
+    // progress peek: a titleless tool_call surfaces as "kind path"
+    expect(events).toContain(`tool:edit ${path}`);
   });
 });

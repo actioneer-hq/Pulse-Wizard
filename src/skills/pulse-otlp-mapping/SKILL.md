@@ -7,7 +7,9 @@ description: >-
   producer's source to learn what it emits, then map/derive it. Covers the canonical Trace schema and
   the closed attribute vocabulary the engine reads, stage and turn-grouping semantics, mapping tricks
   (map-by-meaning, stage-aware ttfb→ttft, expanding JSON-blob metrics, squeezing implied fields),
-  JSONata idioms, and how to validate and classify the result (sorted / doable / impossible).
+  JSONata idioms, and how to validate and classify the result (sorted / doable / impossible). Also
+  specifies the blob-storage descriptor the wizard must produce for saved OTLP histories and call
+  audio (stereo/mono/separated layouts) so Pulse and the UI read them correctly.
 license: MIT
 ---
 
@@ -227,7 +229,33 @@ plain attribute (`transcript`, `text`) should be routed into `content` by your e
 5. **Classify** remaining gaps (sorted / doable / impossible) and squeeze every *doable* one.
 6. **Hand back** the final expression; the wizard registers it with Pulse.
 
-## 12. Worked shape (Pipecat, abbreviated)
+## 12. Grounding examples
+
+Two producers Pulse already supports, shown as worked shapes so you can pattern-match. The first is the
+*hard* case (structural reshaping + blob expansion); the second is the *clean* case (map-by-meaning).
+Your producer will land somewhere between them.
+
+### Example A — LiveKit (hard: split turns + JSON-blob metrics)
+
+Producer: `agent_session` (root) → sibling `user_turn` **and** `agent_turn`; under them
+`user_speaking`, `eou_detection`, `llm_request`, `tts_request`, `agent_speaking`. Per-request metrics
+arrive as a **JSON string** in one attribute (`lk.llm_metrics`, `lk.tts_metrics`). Latency is on
+attributes (`lk.response.ttft/ttfb`, seconds). Transcript is a plain attribute (`lk.pii.*`).
+
+Mapping decisions:
+- stages: agent_session→`call`; user_turn/agent_turn→`turn`; user_speaking→`speech`;
+  eou_detection→`stt`; llm_request→`llm`; tts_request→`tts`; agent_speaking→`playout`.
+- **re-stitch (structural):** the `agent_turn` subtree gets the `turn_id` of the **preceding**
+  `user_turn`, so both halves are one exchange.
+- **expand the blob (`$eval`):** parse `lk.llm_metrics` → `metrics.ttft`, `gen_ai.usage.input_tokens`
+  / `output_tokens` / `cached_tokens`; parse `lk.tts_metrics` → `metrics.ttfb`, `tts.chars`; lift
+  `metadata.model_name` → `gen_ai.request.model`.
+- aliases: `lk.interrupted`→`turn.interrupted`; `lk.response.ttft`→`metrics.ttft`;
+  `lk.response.ttfb`→`metrics.ttfb`; `lk.end_of_turn_delay`→`endpointing.delay`;
+  `lk.transcript_confidence`→`stt.confidence`.
+- content: `lk.pii.user_transcript`→`content.transcript`; `lk.pii.response.text`→`content.llm_spoken`.
+
+### Example B — Pipecat (clean: nested + map-by-meaning)
 
 Producer: `conversation` (root) → `turn` → `stt`/`llm`/`tts` children; emits `gen_ai.usage.*`,
 `metrics.ttfb`, `turn.number`, `transcript`, `text`.
@@ -236,12 +264,73 @@ Mapping decisions:
 - stages: conversation→`call`, turn→`turn`, stt→`stt`, llm→`llm`, tts→`tts`.
 - `turn.number`→`turn.index`; `turn.was_interrupted`→`turn.interrupted`; `language`→`stt.language`;
   `metrics.character_count`→`tts.chars`; `gen_ai.usage.cache_read.input_tokens`→`gen_ai.usage.cached_tokens`.
-- **stage-aware:** `metrics.ttfb` on the `llm` span → `metrics.ttft` (first-token latency); on `tts` it
-  stays `metrics.ttfb`.
+- **stage-aware (map-by-meaning):** `metrics.ttfb` on the `llm` span → `metrics.ttft` (first-token
+  latency); on `tts` it stays `metrics.ttfb`.
 - content: `transcript`→`content.transcript`; `text`→`content.llm_spoken`.
-- `gen_ai.usage.input_tokens` / `output_tokens` / `metrics.ttfb`(tts) / `gen_ai.request.model` are
-  already canonical → pass through.
+- `gen_ai.usage.input_tokens` / `output_tokens` / `metrics.ttfb`(tts) / `gen_ai.request.model` pass
+  through unchanged (already canonical).
 
-Result: the full latency waterfall (response latency, STT lag, **TTFT**, TTFB, assembly/dispatch),
-tokens (in/out/cached), chars, language, and transcripts all light up. Genuinely absent (dashed):
-STT confidence and endpointing delay — Pipecat doesn't emit them.
+Both light up the full latency waterfall (response latency, STT lag, TTFT, TTFB, assembly/dispatch),
+tokens, chars, language, and transcripts. What a producer genuinely doesn't emit (e.g. STT confidence,
+endpointing on Pipecat) stays dashed — that's correct, not a mapping failure.
+
+## 13. Blob storage — saved OTLP histories & call audio (the descriptor you must produce)
+
+Separate from live OTLP, a producer often *archives* data to object storage (S3-compatible / Azure):
+past **OTLP trace files** (for backfilling history) and **call audio**. When the developer has this,
+you produce a **storage descriptor** telling Pulse where the objects are, how to tie each to a call,
+and what each file is. Pulse's pull worker lists the store with `key_regex`, extracts the call id, and
+maps each filename to a role via `file_map`.
+
+Descriptor shape (JSON):
+```jsonc
+{
+  "bucket": "my-recordings",
+  "list_prefix": "calls/",                 // where to list
+  "key_regex": "calls/(?<call>[^/]+)/",    // MUST capture the call id in a named group
+  "id_group": "call",                       // which group holds the external call id
+  "file_map": {                             // filename (basename) -> role Pulse understands
+    "spans.json":  "otlp",                  // a saved OTLP ExportTraceServiceRequest for this call
+    "audio.wav":   "audio",                 // combined recording (stereo OR mono)
+    "caller.wav":  "audio_caller",          // separate mono, caller only
+    "agent.wav":   "audio_agent"            // separate mono, agent only
+  }
+}
+```
+
+The only valid `file_map` roles: **`otlp`**, **`audio`**, **`audio_caller`**, **`audio_agent`**
+(plus `peaks`, `segments`, `artifact_json` if the producer emits them). Do not invent roles.
+
+### OTLP histories (if saved)
+- If the producer writes each call's OTLP payload to storage, map that filename → **`otlp`**. Pulse
+  backfills by replaying it through the **same JSONata mapping** you wrote in Sections 1–12 — so the
+  archived payload must be the same dialect as live. One OTLP file per call.
+
+### Call audio — pick the role by channel layout
+This is the part the UI is picky about. Classify the recording, then choose the mapping:
+
+| What the developer has | How to represent it | Pulse layout | Diarization? |
+|---|---|---|---|
+| **Two separate mono files** (caller + agent, e.g. track egress) | two entries: `…→audio_caller`, `…→audio_agent` | separated | no |
+| **One stereo file, channels split** (ch0 caller, ch1 agent) | one `…→audio` + a `channel_map` (below) | separated | no |
+| **One stereo file, both speakers on both channels** (downmix / dual-mono) | one `…→audio` | mixed | yes (BYO) |
+| **One mono file** (single mixed channel) | one `…→audio` | mono | yes (BYO) |
+
+- **Prefer separate mono files or a split-stereo file** — those give Pulse per-speaker attribution with
+  no diarization. Mixed/mono still work but need a BYO diarization endpoint configured, or they fall
+  back to caller-only.
+- For a **split-stereo** file where you know the channel order, include a channel map so Pulse doesn't
+  have to guess roles — the UI reads exactly this shape:
+  ```json
+  "channel_map": { "0": "caller", "1": "agent" }   // channel index -> role; roles are "caller" | "agent"
+  ```
+- Pulse **auto-detects** layout (mono / separated / mixed) from the audio itself, so `channel_map` is a
+  hint that improves correctness, not a hard requirement. Never guess the channel order — omit the map
+  if the source doesn't make it clear.
+- Optional per-file fields the UI/pipeline can use when known: `sample_rate`, `channels`,
+  `t0_offset_s` (audio start relative to the call's `started_at`, for aligning waveform to the timeline).
+
+### Honesty rule (same as everywhere)
+Only describe storage the developer actually has. No archived OTLP → no `otlp` entries (live ingest
+still works). No audio → no audio entries (span metrics still work). Never fabricate a bucket, a
+key pattern, or a channel assignment.

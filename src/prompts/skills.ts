@@ -51,6 +51,21 @@ export function otlpPrompt(skill: string, repo: string, artifact: string): strin
   ].join("\n");
 }
 
+/** Re-prompt the agent to fix a mapping the wizard's validator rejected. */
+export function fixPrompt(mappingPath: string, validatorReport: string): string {
+  return [
+    "Your OTLP mapping FAILED the wizard's validator. Fix it — do not start over.",
+    "",
+    `Edit ${mappingPath} (and sample-otlp.json only if the sample itself is malformed) to resolve every`,
+    "error below. Keep following the pulse-otlp-mapping skill rules: stay local (no web/MCP), force",
+    "arrays for spans and events, seconds-from-call-start times, and an explicit turn_id on every",
+    "turn-stage span. Re-write the corrected file to the same path.",
+    "",
+    "Validator output:",
+    validatorReport,
+  ].join("\n");
+}
+
 export function storagePrompt(skill: string, repo: string, artifact: string): string {
   return [
     `Use the \`pulse-storage-mapping\` Agent Skill. Read its full instructions at ${skill}/SKILL.md and`,

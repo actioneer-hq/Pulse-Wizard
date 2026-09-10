@@ -92,13 +92,18 @@ function validate(trace) {
     if (span.stage === "turn" && present(span.turn_id)) turnAnchors.add(String(span.turn_id));
     if (!object(span.attrs)) errors.push(`${at}.attrs must be an object`);
     if (!object(span.content)) errors.push(`${at}.content must be an object`);
-    if (!Array.isArray(span.events)) errors.push(`${at}.events must be an array`);
+    const eventsIsArray = Array.isArray(span.events);
+    if (span.events !== undefined && !eventsIsArray) {
+      errors.push(
+        `${at}.events must be an array (JSONata returns a single object for one match — force an array with [ ])`,
+      );
+    }
     for (const key of CANONICAL_SECONDS) {
       if (present(span.attrs?.[key]) && !finite(span.attrs[key])) {
         errors.push(`${at}.attrs.${key} must be a finite number in seconds`);
       }
     }
-    for (const [eventIndex, event] of (span.events ?? []).entries()) {
+    for (const [eventIndex, event] of (eventsIsArray ? span.events : []).entries()) {
       const eventAt = `${at}.events[${eventIndex}]`;
       if (!object(event) || !present(event.name)) errors.push(`${eventAt}.name is required`);
       if (!finite(event?.t)) errors.push(`${eventAt}.t must be a finite relative-second value`);
@@ -152,7 +157,9 @@ function metricCoverage(spans) {
     spans.some((span) => span.stage === stage && present(span.attrs?.[key]));
   const hasContent = (key) => spans.some((span) => present(span.content?.[key]));
   const hasEvent = (name) =>
-    spans.some((span) => span.events?.some((event) => event.name === name));
+    spans.some(
+      (span) => Array.isArray(span.events) && span.events.some((event) => event.name === name),
+    );
   const result = {};
   const set = (name, status, evidence) => {
     result[name] = { status, evidence };

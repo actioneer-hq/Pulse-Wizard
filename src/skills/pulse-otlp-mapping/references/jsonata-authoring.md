@@ -25,6 +25,11 @@ Implement small expression-local functions for:
 ## Safe patterns
 
 - Use `$merge([base, condition ? {"key": value} : {}])` for optional output fields.
+- **Force arrays for `spans` and `events`.** JSONata yields a *single object* (not a 1-element array)
+  when a path matches once, and *nothing* when it matches zero times. `spans` and each span's `events`
+  MUST be arrays. Wrap the mapped sequence in `[ ... ]` and coalesce empties, e.g.
+  `"events": [ s.events.{ ... } ]` and, for a possibly-absent list, `[ $x ]` so one match still yields
+  an array and none yields `[]`. The validator rejects a non-array `events`.
 - Quote dotted source keys with backticks.
 - Branch on resolved stage when one producer key has stage-dependent meaning.
 - Build a span-ID lookup for nearest-turn ancestry; write the result directly to `turn_id`.

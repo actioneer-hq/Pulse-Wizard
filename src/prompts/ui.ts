@@ -16,6 +16,12 @@ export function note(msg: string, title?: string): void {
   p.note(msg, title);
 }
 
+/** Append one plain line in clack's gutter style. Used for flood-proof progress on non-TTY stdout
+ * (VS Code debug terminals, pipes, CI) where the animated spinner would print a line per frame. */
+export function line(msg: string): void {
+  process.stdout.write(`${pc.gray("│")}  ${pc.dim(msg)}\n`);
+}
+
 export function spinner() {
   return p.spinner();
 }

@@ -17,31 +17,38 @@ function short(message: string): string {
   return `${tool} ${tail}`.slice(0, 60);
 }
 
-/** Run an agent task behind clack's spinner. clack animates its own frames (liveness), so we only
- * re-render the label on a NEW tool action — no self-driven interval (that flooded terminals that
- * append instead of updating in place) and no streaming the model's prose into the label. With
- * `verbose`, every event still goes to stderr for a full peek. */
+/** Run an agent task and show a live peek of its actions.
+ *
+ * clack's animated spinner only updates in place on a genuine TTY; in VS Code debug terminals,
+ * piped output, or CI the frame loop appends instead, flooding the screen with one line per tick.
+ * So we only animate when stdout is a real TTY. Otherwise we print a discrete line per NEW tool
+ * action (deduped) — appending each exactly once, which can never flood. Either way a new label is
+ * emitted only on a new action, and with `verbose` every event also goes to stderr. */
 export async function withAgentProgress<T>(
   label: string,
   verbose: boolean,
   run: (onEvent: (e: DriverEvent) => void) => Promise<T>,
 ): Promise<T> {
-  const s = ui.spinner();
   const t0 = Date.now();
-  let lastLabel = "";
+  let last = "";
+  const animate = Boolean(process.stdout.isTTY);
+  const s = animate ? ui.spinner() : null;
 
-  s.start(label);
+  if (s) s.start(label);
+  else ui.line(`${label}…`);
   try {
     return await run((e) => {
       if (verbose) log.debug(`[agent] ${e.kind}: ${e.message}`);
-      if (e.kind !== "tool") return; // skip text/prose in the label
-      const next = `${label} · ${short(e.message)}`;
-      if (next !== lastLabel) {
-        lastLabel = next;
-        s.message(next);
-      }
+      if (e.kind !== "tool") return; // skip text/prose in the peek
+      const next = short(e.message);
+      if (next === last) return; // dedupe repeated actions
+      last = next;
+      if (s) s.message(`${label} · ${next}`);
+      else ui.line(`  · ${next}`); // discrete, append-once line — flood-proof
     });
   } finally {
-    s.stop(`${label} · done in ${mmss(t0)}`);
+    const done = `${label} · done in ${mmss(t0)}`;
+    if (s) s.stop(done);
+    else ui.line(done);
   }
 }

@@ -6,7 +6,6 @@ import * as ui from "../prompts/ui.js";
 export const otlpJob: Step = {
   id: "otlp-job",
   title: "OTLP mapping",
-  skip: (ctx) => ctx.job !== "otlp",
   async run(ctx) {
     ui.note(
       [

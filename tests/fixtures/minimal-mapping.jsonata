@@ -1,0 +1,53 @@
+(
+  $rs := resourceSpans[0];
+  $spans := $rs.scopeSpans.spans;
+  $root := $spans[name = "call"][0];
+  $t0 := $number($root.startTimeUnixNano);
+  $turnId := $string($spans[name = "turn"][0].spanId);
+  $raw := function($s, $key) { $s.attributes[key = $key].value };
+  $value := function($v) {
+    $exists($v.stringValue) ? $v.stringValue :
+    $exists($v.intValue) ? $number($v.intValue) :
+    $exists($v.doubleValue) ? $v.doubleValue :
+    $exists($v.boolValue) ? $v.boolValue : null
+  };
+  $field := function($s, $key) { $value($raw($s, $key)) };
+  {
+    "header": {
+      "call_id": $string($root.traceId),
+      "source": $rs.resource.attributes[key = "service.name"].value.stringValue,
+      "environment": "test",
+      "started_at": $fromMillis($t0 / 1000000),
+      "ended_at": $fromMillis($number($root.endTimeUnixNano) / 1000000)
+    },
+    "spans": $map($spans, function($s) {(
+      $stage := $s.name in ["call", "turn", "speech", "stt", "llm", "tts"] ? $s.name : "unknown";
+      {
+        "span_id": $string($s.spanId),
+        "parent_span_id": $s.parentSpanId ? $string($s.parentSpanId) : null,
+        "name": $string($s.name),
+        "stage": $stage,
+        "t_start": ($number($s.startTimeUnixNano) - $t0) / 1000000000,
+        "t_end": $s.endTimeUnixNano ?
+          ($number($s.endTimeUnixNano) - $t0) / 1000000000 : null,
+        "turn_id": $stage = "call" ? null : $turnId,
+        "error": false,
+        "attrs": $merge([
+          $stage = "llm" ? {
+            "metrics.ttft": $field($s, "ttft_ms") / 1000,
+            "gen_ai.usage.output_tokens": $field($s, "output_tokens")
+          } : {},
+          $stage = "tts" ? {
+            "metrics.ttfb": $field($s, "ttfb_ms") / 1000,
+            "tts.chars": $field($s, "characters")
+          } : {}
+        ]),
+        "content": $merge([
+          $stage = "stt" ? {"transcript": $field($s, "transcript")} : {},
+          $stage = "tts" ? {"llm_spoken": $field($s, "text")} : {}
+        ]),
+        "events": []
+      }
+    )})
+  }
+)

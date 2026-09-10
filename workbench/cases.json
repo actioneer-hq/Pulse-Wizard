@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "livekit-python-starter",
+      "framework": "livekit",
+      "language": "python",
+      "scenario": "framework-native-otlp",
+      "repository": "https://github.com/livekit-examples/agent-starter-python.git",
+      "commit": "6b63960b36ac0da64824b8c94a6baa1bf5862ea2",
+      "license": "MIT"
+    },
+    {
+      "id": "livekit-node-starter",
+      "framework": "livekit",
+      "language": "typescript",
+      "scenario": "framework-native-otlp",
+      "repository": "https://github.com/livekit-examples/agent-starter-node.git",
+      "commit": "8a55accd5ef00b67131a5f5524eae822419e209f",
+      "license": "MIT"
+    },
+    {
+      "id": "pipecat-jaeger",
+      "framework": "pipecat",
+      "language": "python",
+      "scenario": "existing-otlp",
+      "repository": "https://github.com/pipecat-ai/pipecat-examples.git",
+      "commit": "87ede7793edc6b9b49797dc8d3bc6cb51f6f9252",
+      "license": "BSD-2-Clause",
+      "subdirectory": "open-telemetry/jaeger"
+    }
+  ]
+}

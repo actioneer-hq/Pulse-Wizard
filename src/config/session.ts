@@ -1,6 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { JobKind } from "../flow/context.js";
 
 /** Persisted, non-secret slice of a run — lets a re-run resume without re-asking everything.
  * Tokens are NOT stored here. Lives at <repo>/.pulse/session.json (gitignored). */
@@ -8,7 +7,6 @@ export interface WizardSession {
   pulseUrl?: string;
   agentId?: string;
   driverId?: string;
-  job?: JobKind;
   updatedAt?: string;
 }
 

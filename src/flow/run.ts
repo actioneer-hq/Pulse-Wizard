@@ -1,7 +1,6 @@
 import { saveSession } from "../config/session.js";
 import * as ui from "../prompts/ui.js";
 import { blobJob } from "../steps/blob.js";
-import { chooseJob } from "../steps/chooseJob.js";
 import { connectPulse } from "../steps/connectPulse.js";
 import { otlpJob } from "../steps/otlp.js";
 import { outro } from "../steps/outro.js";
@@ -12,7 +11,7 @@ import type { WizardContext } from "./context.js";
 import type { Step } from "./step.js";
 
 /** The guided flow, in order. Adding a stage = adding a Step here. */
-const STEPS: Step[] = [selectAgent, connectPulse, chooseJob, otlpJob, blobJob, outro];
+const STEPS: Step[] = [selectAgent, connectPulse, otlpJob, blobJob, outro];
 
 export async function runFlow(ctx: WizardContext): Promise<void> {
   ui.intro("Pulse Wizard");
@@ -25,7 +24,6 @@ export async function runFlow(ctx: WizardContext): Promise<void> {
     await saveSession(ctx.repoPath, {
       pulseUrl: ctx.pulseUrl,
       driverId: ctx.driver?.id,
-      job: ctx.job,
     });
   } catch (e) {
     if (e instanceof WizardError) {

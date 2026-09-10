@@ -2,7 +2,7 @@
   "$schema": "https://biomejs.dev/schemas/1.9.0/schema.json",
   "organizeImports": { "enabled": true },
   "files": {
-    "ignore": ["dist", "node_modules"]
+    "ignore": ["dist", "node_modules", "workbench/checkouts", "**/.pulse"]
   },
   "formatter": {
     "enabled": true,

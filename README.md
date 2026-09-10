@@ -3,7 +3,7 @@
 Onboarding CLI for [Pulse](https://github.com/Glitchcraft-Inc/Actioneer-Pulse) — wires a voice
 agent's telemetry into a self-hosted Pulse instance.
 
-Two jobs:
+Every run configures both parts of a complete Pulse integration:
 
 - **OTLP** — drives your own coding agent (Claude Code, Codex, or any ACP agent) to generate a
   JSONata mapping from your producer's OTLP spans → Pulse's canonical shape, then registers it.
@@ -22,6 +22,7 @@ npm run build          # bundle to dist/ (tsup)
 npm test               # vitest
 npm run lint           # biome
 npm run typecheck      # tsc --noEmit
+npm run workbench:list # list pinned real-world test cases
 ```
 
 ## Run
@@ -38,11 +39,12 @@ src/
   cli.ts          entry (arg parsing)
   index.ts        run() — programmatic entry
   flow/           step orchestration (context, step, run)
-  steps/          guided stages (select agent, connect, choose job, otlp, blob, outro)
+  steps/          guided stages (select agent, connect, OTLP, storage, outro)
   drivers/        coding-agent abstraction (Driver) + headless + ACP + registry
   pulse/          PulseClient (Pulse API)
   prompts/        @clack/prompts wrapper
   config/         session persistence
   util/           exec, log, errors
-  skills/         Agent Skills bundled as context (pulse-otlp-mapping/SKILL.md)
+  skills/         OTLP and blob-storage Agent Skills bundled as progressive context
+workbench/        pinned real-world repos for end-to-end wizard testing
 ```

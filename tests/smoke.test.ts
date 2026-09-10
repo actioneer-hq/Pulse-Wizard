@@ -18,10 +18,9 @@ describe("driver registry", () => {
 
 describe("context", () => {
   it("seeds an empty artifacts bag and carries flags", () => {
-    const ctx = newContext("/tmp/x", { job: "otlp" });
+    const ctx = newContext("/tmp/x", { agent: "codex" });
     expect(ctx.repoPath).toBe("/tmp/x");
-    expect(ctx.job).toBeUndefined(); // flags carry it; steps set ctx.job
-    expect(ctx.flags.job).toBe("otlp");
+    expect(ctx.flags.agent).toBe("codex");
     expect(ctx.artifacts).toEqual({});
   });
 });

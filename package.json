@@ -6,7 +6,7 @@
   "bin": {
     "pulse-wizard": "dist/cli.js"
   },
-  "files": ["dist"],
+  "files": ["dist", "src/skills"],
   "engines": {
     "node": ">=20"
   },
@@ -17,10 +17,13 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "workbench:list": "node workbench/materialize.mjs --list",
+    "workbench:materialize": "node workbench/materialize.mjs"
   },
   "dependencies": {
     "@clack/prompts": "^0.7.0",
+    "jsonata": "^2.2.2",
     "picocolors": "^1.0.0"
   },
   "devDependencies": {

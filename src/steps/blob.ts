@@ -6,7 +6,6 @@ import * as ui from "../prompts/ui.js";
 export const blobJob: Step = {
   id: "blob-job",
   title: "Audio storage",
-  skip: (ctx) => ctx.job !== "blob",
   async run(ctx) {
     ui.note(
       [

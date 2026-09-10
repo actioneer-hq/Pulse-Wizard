@@ -1,336 +1,103 @@
 ---
 name: pulse-otlp-mapping
 description: >-
-  Use when onboarding a voice agent to Pulse whose OTLP dialect Pulse doesn't natively support.
-  Guides writing ONE JSONata expression that converts the producer's OpenTelemetry payloads into
-  Pulse's canonical Trace shape, so Pulse's fixed metric engine can compute the dashboard. Read the
-  producer's source to learn what it emits, then map/derive it. Covers the canonical Trace schema and
-  the closed attribute vocabulary the engine reads, stage and turn-grouping semantics, mapping tricks
-  (map-by-meaning, stage-aware ttfb→ttft, expanding JSON-blob metrics, squeezing implied fields),
-  JSONata idioms, and how to validate and classify the result (sorted / doable / impossible). Also
-  specifies the blob-storage descriptor the wizard must produce for saved OTLP histories and call
-  audio (stereo/mono/separated layouts) so Pulse and the UI read them correctly.
+  Onboard an unsupported voice-agent OTLP dialect to Pulse by inspecting its source and captured
+  traces, authoring a JSONata transform into Pulse's canonical Trace contract, and validating
+  metric coverage before registration. Use for OTLP mapping only; use pulse-storage-mapping for
+  recordings or archived traces in blob storage.
 license: MIT
 ---
 
-# Author a Pulse OTLP → canonical Trace mapping (JSONata)
+# Map voice-agent OTLP into Pulse
 
-> This is the wizard's brain. It is injected as context into whatever coding agent the developer
-> uses (Claude Code / Codex / an ACP agent). Your job, agent, is to read the developer's voice-agent
-> **source code** and produce **one JSONata expression** that converts their OpenTelemetry (OTLP)
-> payloads into Pulse's **canonical Trace** JSON. Pulse then runs its own metric engine on that
-> canonical shape — unchanged — to produce every number on the dashboard.
->
-> **Draft — for review.** Field lists are grounded in Pulse's core; treat the canonical vocabulary
-> and Trace schema as authoritative, the prose as refinable.
+Produce one total JSONata expression that transforms an OTLP `ExportTraceServiceRequest` into
+Pulse's canonical `Trace`. Pulse's metric engine stays fixed. The mapping supplies structure and
+canonical meaning without inventing unavailable signals.
 
----
+The mapping input must already be sharded to one OTLP `traceId`. The ingest layer, not JSONata,
+splits multi-call export batches before evaluation.
 
-## 1. The pipeline you are one step of
+## Required evidence
 
-```
-producer OTLP  ──[ YOUR JSONata expression ]──▶  canonical Trace  ──[ Pulse metric engine ]──▶  UI metrics
-```
+Do not author a mapping until both are available:
 
-- The metric engine is fixed. It reads a **closed canonical vocabulary** (Section 4) off a fixed
-  **Trace shape** (Section 3). It does not know or care which producer the data came from.
-- Therefore **the only lever on how good the dashboard looks is the quality of your mapping.** Every
-  metric you can light up is a metric you *mapped or derived* into canonical form.
-- You are not editing the producer's telemetry. You are writing a pure transform: OTLP JSON in,
-  canonical Trace JSON out.
+- Producer source that creates spans, attributes, events, or tracing configuration.
+- At least one captured OTLP payload from a completed call.
 
-## 2. Your deliverable
+Prefer captures covering a multi-turn call, interruption, tool call, and error. A happy-path trace
+cannot prove those mappings. If the application emits no OTLP yet, stop this workflow and instrument
+it to emit Pulse's canonical OTLP contract instead.
 
-A single JSONata expression string that, given one OTLP `ExportTraceServiceRequest` payload
-(`{ resourceSpans: [...] }`), evaluates to:
+Never read `.env` values, credentials, unrelated conversation content, or unrelated application
+code. Report when source semantics and captured payloads disagree. Write generated artifacts only
+to the artifact directory supplied by the wizard; do not add mapping files to the customer's repo.
 
-```json
-{ "header": { ... }, "spans": [ ... ] }
-```
+## Load the contract
 
-matching the schema in Section 3. Nothing else. It must be **total**: it should work for every call
-the producer emits, not just the sample you're looking at (missing fields → simply absent, never an
-error — see Section 10).
+Before writing the mapping, read:
 
-## 3. The canonical Trace schema (the exact target)
+1. [references/canonical-trace.md](references/canonical-trace.md) for the exact output contract and
+   correlation rules.
+2. [references/metric-inputs.md](references/metric-inputs.md) for the signals behind each metric.
+3. [references/jsonata-authoring.md](references/jsonata-authoring.md) for OTLP normalization and
+   safe JSONata patterns.
 
-```jsonc
-{
-  "header": {
-    "call_id": "string",            // REQUIRED, non-empty. One call = one trace; use the traceId.
-    "source": "string",             // producer/service name (resource service.name)
-    "environment": "string",        // e.g. "prod"; default "prod" if absent
-    "started_at": "ISO-8601",       // call start as an ISO datetime string
-    "ended_at": "ISO-8601 | null",  // call end
-    // optional rollups (fill if cheaply known, else omit): engine, carrier,
-    // stt_provider, llm_provider, llm_model, tts_provider, voice, template_sha256
-  },
-  "spans": [
-    {
-      "span_id": "string",
-      "parent_span_id": "string | null",
-      "name": "string",             // the producer's raw span name (keep it)
-      "stage": "call|turn|speech|stt|llm|tts|playout|tool|net|unknown",  // Section 5
-      "t_start": 0.0,               // SECONDS since call start (float), NOT nanoseconds
-      "t_end": 0.0,                 // SECONDS since call start (float), or null
-      "turn_id": "string | null",   // groups a turn's spans; Section 5
-      "error": false,
-      "attrs": { },                 // canonical attributes; Section 4
-      "content": { },               // conversation text; Section 8
-      "events": [ { "name": "string", "t": 0.0, "attrs": {}, "content": {} } ]
-    }
-  ]
-}
-```
+Producer source defines meaning. Captured payloads confirm wire shape and units. Similar names are
+not evidence of equivalent semantics.
 
-Critical shape rules (common mistakes):
-- **Times are seconds-from-call-start**, as floats — not epoch nanoseconds. Compute
-  `t0 = start of the root span (ns)`, then every span's `t_start = (span_start_ns - t0) / 1e9`.
-- **Header timestamps are ISO strings**, not numbers. Convert epoch → ISO (e.g. `$fromMillis(ns/1e6)`).
-- `call_id` must be a non-empty string. Use the `traceId` unless the producer groups calls another way.
-- Unknown attributes are allowed but ignored by the engine — only the canonical names in Section 4 are
-  read. Put shape data in `attrs`, conversation text in `content`.
+## Workflow
 
-## 4. The canonical vocabulary (what the engine actually reads)
+1. Inventory emitted span names, parent relationships, attributes, events, status values, units,
+   and text fields relevant to calls, turns, speech, STT, LLM, TTS, playout, and tools.
+2. Identify the call root and how all spans belonging to one call are correlated.
+3. Identify one caller-agent exchange and derive a stable `turn_id` for every related `turn`,
+   `speech`, `stt`, `llm`, `tts`, and `playout` span. Canonical output requires explicit IDs even
+   when input spans are nested.
+4. Classify stages by semantics. Use `unknown` when evidence is insufficient.
+5. Map canonical attributes and content. Convert canonical latency attributes to seconds and all
+   span/event times to seconds from root start.
+6. Preserve raw span names and useful unmapped attributes. Put conversation text in `content`.
+7. Evaluate against every sample and run:
 
-Map the producer's attributes onto these exact keys. Anything not on this list is dead weight to the
-metric engine (it's kept but unread). **Units matter: all `metrics.*` latencies and `endpointing.delay`
-are in SECONDS.**
+   ```bash
+   node <skill-dir>/scripts/validate-mapping.mjs \
+     <artifact-dir>/mapping.jsonata <sample-otlp.json> \
+     <artifact-dir>/canonical-trace.json <artifact-dir>/coverage.json
+   ```
 
-| Canonical attr (on `attrs`) | Meaning | Stage it belongs on |
-|---|---|---|
-| `turn.id` | turn correlation id | turn + its children |
-| `turn.index` | 1-based turn number (ordering) | turn |
-| `turn.trigger` | what started the turn | turn |
-| `turn.interrupted` | caller barged in | turn |
-| `turn.interruption_probability` | barge-in confidence | turn |
-| `turn.committed` | turn was committed | turn |
-| `turn.abandoned` | turn abandoned | turn |
-| `stt.language` | detected language | stt |
-| `stt.confidence` | transcription confidence | stt |
-| `llm.finish_reason` | why generation stopped | llm |
-| `metrics.ttft` | time to first token (**seconds**) | llm |
-| `metrics.ttfb` | time to first audio byte (**seconds**) | tts |
-| `metrics.e2e_latency` | producer's own end-to-end (**seconds**) | turn |
-| `endpointing.delay` | endpointing hold after speech (**seconds**) | turn/stt |
-| `gen_ai.usage.input_tokens` | prompt tokens | llm |
-| `gen_ai.usage.output_tokens` | completion tokens | llm |
-| `gen_ai.usage.cached_tokens` | cached prompt tokens | llm |
-| `gen_ai.request.model` | model name | llm/tts |
-| `tts.chars` | characters synthesized | tts |
-| `tts.chars_cut` | characters cut on interruption | tts |
-| `tts.cut_reason` | why TTS was cut | tts |
-| `tts.cancelled` | synthesis aborted | tts |
+   The wizard supplies absolute values for `<skill-dir>` and `<artifact-dir>` when invoking the
+   agent. Do not guess either path.
 
-Span **events** the engine reads (on `events[].name`) — an alternative source for the same latencies
-when the producer emits them as events rather than attributes:
-- `llm.first_token` → feeds TTFT (if `metrics.ttft` attr absent)
-- `tts.first_audio` → feeds TTFB (if `metrics.ttfb` attr absent)
+8. Fix every validation error. Review warnings and metric coverage against producer source.
+9. Register only after validation passes.
 
-## 5. Stages and turn grouping (the structural core)
+## Non-negotiable rules
 
-`stage` classifies each span; the engine's timing logic keys entirely off it.
+- One call produces one non-empty `header.call_id`; normally this is OTLP `traceId`.
+- A mapping sample contains exactly one distinct non-empty OTLP `traceId`.
+- `t_start`, `t_end`, and event `t` are seconds from call start, never epoch values.
+- Every turn-stage span has an explicit `turn_id` in canonical output.
+- `metrics.ttft`, `metrics.ttfb`, `metrics.e2e_latency`, and `endpointing.delay` use seconds.
+- Map by meaning and stage. For example, producer `ttfb` on an LLM span may mean Pulse TTFT.
+- Text belongs in `content.transcript`, `content.llm_raw`, or `content.llm_spoken`.
+- Reported durations remain `metrics.*` attributes; do not present them as observed events.
+- Unknown and missing are valid. Guessed values are invalid.
+- Never use JSONata `$eval` on producer-controlled strings. Decode embedded JSON only through a
+  trusted preprocessing helper.
+- Never hard-code captured trace IDs, span IDs, timestamps, or content.
 
-| Stage | Meaning | Why it matters for metrics |
-|---|---|---|
-| `call` | the whole session / root | carries call_id, timestamps |
-| `turn` | one exchange (caller ↔ agent) | the unit every turn metric is computed on |
-| `speech` | caller audibly speaking (VAD) | its **end = end of caller speech** → response-latency start |
-| `stt` | transcription | transcript, language, confidence; STT-final timing |
-| `llm` | generation | tokens, TTFT |
-| `tts` | synthesis | chars, TTFB, agent-speaking window |
-| `playout` | audio reaching the caller | agent-speaking window |
-| `tool` | tool/function call | — |
-| `unknown` | unmapped | never guess — leave `unknown` if unsure |
+## Deliverables
 
-Turn grouping:
-- A **turn** span (stage `turn`) anchors one exchange. Its `stt`/`llm`/`tts` spans must carry the same
-  `turn_id` (or be nested under the turn span so the engine can attach them).
-- If the producer nests service spans **under** the turn span (Pipecat-style), just set each turn
-  span's `turn_id` to its own id; children inherit it structurally. If service spans are **siblings**
-  with a shared correlation attribute, map that attribute to `turn.id` on all of them.
-- If the producer splits one exchange into two turn spans (LiveKit's `user_turn` + `agent_turn`), give
-  the agent-side span the **preceding caller turn's** id, so both halves land in one exchange.
+Return these artifacts to the wizard:
 
-## 6. What feeds which UI metric (so you know what to chase)
+- `mapping.jsonata`: final expression only.
+- `coverage.json`: validator output with available, degraded, unavailable, and untested inputs.
+- `mapping-notes.md`: concise evidence for mappings, tested scenarios, and unavailable signals.
 
-The engine derives these from what you map. Prioritize mapping the inputs on the right.
+Do not produce storage configuration here. That belongs to `pulse-storage-mapping`.
 
-| UI metric | Needs (canonical) |
-|---|---|
-| response latency | `speech` span end + `tts` start (span timings) |
-| STT lag | `speech`/`stt` timings |
-| **TTFT** | `metrics.ttft` **or** an `llm.first_token` event **or** first-token latency the producer records under another name (see Section 7) |
-| TTFB | `metrics.ttfb` **or** a `tts.first_audio` event |
-| tokens in/out/cached | `gen_ai.usage.*` |
-| TTS chars | `tts.chars` |
-| language / confidence | `stt.language` / `stt.confidence` |
-| interruptions | `turn.interrupted`, `tts.chars_cut`, `tts.cut_reason` |
-| transcript / agent text | `content.transcript` / `content.llm_spoken` |
+## Completion gate
 
-## 7. The mapping playbook (the tricks that separate a good mapping from a lazy one)
-
-1. **Map by meaning, not by name.** The producer may record a canonical quantity under a different
-   name. Example: some producers label the LLM's first-token latency `metrics.ttfb` *on the LLM span*
-   — that value **is** TTFT. Promote it (stage-aware) to `metrics.ttft`. Don't leave a metric dashed
-   just because the name didn't match.
-2. **Be stage-aware.** The same source key can mean different things on different spans (`ttfb` on
-   `llm` = TTFT; `ttfb` on `tts` = TTFB). Branch on the span's stage.
-3. **Expand embedded blobs.** If the producer packs metrics into a JSON *string* attribute, parse it
-   (`$eval`) and spread the fields into canonical attrs.
-4. **Squeeze implied fields.** Cached tokens under `cache_read.input_tokens` → `gen_ai.usage.cached_tokens`.
-   A model name buried in metadata → `gen_ai.request.model`. Look for everything the engine can use.
-5. **Content vs shape.** Transcripts / spoken text go in `content` (Section 8), everything else in `attrs`.
-6. **Watch units.** Canonical latencies are **seconds**. If the producer emits milliseconds, divide.
-7. **Never fabricate.** If the producer genuinely doesn't emit something (e.g. STT confidence,
-   endpointing), leave it out. A dashed metric is honest; a wrong one is not.
-
-## 8. Content
-
-Conversation text lives in `span.content`, keyed by kind:
-- `transcript` — the caller's transcribed speech (on the `stt` span, or a turn span).
-- `llm_spoken` — what the agent said / the LLM's spoken output (on the `tts` span).
-- `llm_raw` — raw model output, if distinct from spoken.
-
-Producers that already namespace text under `voice.content.*` map cleanly; producers that put it in a
-plain attribute (`transcript`, `text`) should be routed into `content` by your expression.
-
-## 9. JSONata cookbook (idioms you'll need)
-
-- **Flatten OTLP typed attributes** (`{key, value:{stringValue|intValue|boolValue|doubleValue}}`):
-  a helper that reads whichever value field is present and merges the list into an object.
-- **ns → seconds:** `$round(($number(startNs) - $t0) / 1e9, 6)`.
-- **epoch → ISO:** `$fromMillis($number(ns) / 1e6)`.
-- **root span:** the one with no `parentSpanId`; its start is `$t0`.
-- **merge objects / build conditionally:** `$merge([...])` of per-field `cond ? {k:v} : {}`.
-- **parse an embedded JSON string:** `$eval(theString)` (JSON is a subset of JSONata).
-- **nearest-turn ancestor:** walk `parentSpanId` via a `{spanId: span}` map to find the enclosing
-  `turn` span; a turn span's `turn_id` is its own id.
-- **quote dotted keys** with backticks: `` $f.`gen_ai.usage.input_tokens` ``.
-
-## 10. Honesty & degradation
-
-- The metric engine degrades gracefully: a canonical field that's absent renders as `-` on the UI and
-  the rest of the call still computes. So **omit** what the producer doesn't provide — do not invent.
-- Classify every canonical field into one of three buckets and report them:
-  - **sorted** — mapped and verified against the sample output.
-  - **doable** — present in the producer's spans but not yet mapped → map it.
-  - **impossible** — the producer never emits it → leave dashed; note it so the developer can improve
-    their telemetry if they want that metric.
-
-## 11. The process you follow
-
-1. **Read the producer's source** — find where it creates spans / sets attributes / emits events. This
-   is the ground truth for what's available and what each field means (better than a sample alone).
-2. **Look at sample spans** (provided) to confirm exact key names and value encodings.
-3. **Draft** the JSONata expression targeting the Section 3 shape and Section 4 vocab.
-4. **Run it locally** on the samples (the wizard does this) and **diff** the produced canonical Trace
-   against expectations; fix until valid.
-5. **Classify** remaining gaps (sorted / doable / impossible) and squeeze every *doable* one.
-6. **Hand back** the final expression; the wizard registers it with Pulse.
-
-## 12. Grounding examples
-
-Two producers Pulse already supports, shown as worked shapes so you can pattern-match. The first is the
-*hard* case (structural reshaping + blob expansion); the second is the *clean* case (map-by-meaning).
-Your producer will land somewhere between them.
-
-### Example A — LiveKit (hard: split turns + JSON-blob metrics)
-
-Producer: `agent_session` (root) → sibling `user_turn` **and** `agent_turn`; under them
-`user_speaking`, `eou_detection`, `llm_request`, `tts_request`, `agent_speaking`. Per-request metrics
-arrive as a **JSON string** in one attribute (`lk.llm_metrics`, `lk.tts_metrics`). Latency is on
-attributes (`lk.response.ttft/ttfb`, seconds). Transcript is a plain attribute (`lk.pii.*`).
-
-Mapping decisions:
-- stages: agent_session→`call`; user_turn/agent_turn→`turn`; user_speaking→`speech`;
-  eou_detection→`stt`; llm_request→`llm`; tts_request→`tts`; agent_speaking→`playout`.
-- **re-stitch (structural):** the `agent_turn` subtree gets the `turn_id` of the **preceding**
-  `user_turn`, so both halves are one exchange.
-- **expand the blob (`$eval`):** parse `lk.llm_metrics` → `metrics.ttft`, `gen_ai.usage.input_tokens`
-  / `output_tokens` / `cached_tokens`; parse `lk.tts_metrics` → `metrics.ttfb`, `tts.chars`; lift
-  `metadata.model_name` → `gen_ai.request.model`.
-- aliases: `lk.interrupted`→`turn.interrupted`; `lk.response.ttft`→`metrics.ttft`;
-  `lk.response.ttfb`→`metrics.ttfb`; `lk.end_of_turn_delay`→`endpointing.delay`;
-  `lk.transcript_confidence`→`stt.confidence`.
-- content: `lk.pii.user_transcript`→`content.transcript`; `lk.pii.response.text`→`content.llm_spoken`.
-
-### Example B — Pipecat (clean: nested + map-by-meaning)
-
-Producer: `conversation` (root) → `turn` → `stt`/`llm`/`tts` children; emits `gen_ai.usage.*`,
-`metrics.ttfb`, `turn.number`, `transcript`, `text`.
-
-Mapping decisions:
-- stages: conversation→`call`, turn→`turn`, stt→`stt`, llm→`llm`, tts→`tts`.
-- `turn.number`→`turn.index`; `turn.was_interrupted`→`turn.interrupted`; `language`→`stt.language`;
-  `metrics.character_count`→`tts.chars`; `gen_ai.usage.cache_read.input_tokens`→`gen_ai.usage.cached_tokens`.
-- **stage-aware (map-by-meaning):** `metrics.ttfb` on the `llm` span → `metrics.ttft` (first-token
-  latency); on `tts` it stays `metrics.ttfb`.
-- content: `transcript`→`content.transcript`; `text`→`content.llm_spoken`.
-- `gen_ai.usage.input_tokens` / `output_tokens` / `metrics.ttfb`(tts) / `gen_ai.request.model` pass
-  through unchanged (already canonical).
-
-Both light up the full latency waterfall (response latency, STT lag, TTFT, TTFB, assembly/dispatch),
-tokens, chars, language, and transcripts. What a producer genuinely doesn't emit (e.g. STT confidence,
-endpointing on Pipecat) stays dashed — that's correct, not a mapping failure.
-
-## 13. Blob storage — saved OTLP histories & call audio (the descriptor you must produce)
-
-Separate from live OTLP, a producer often *archives* data to object storage (S3-compatible / Azure):
-past **OTLP trace files** (for backfilling history) and **call audio**. When the developer has this,
-you produce a **storage descriptor** telling Pulse where the objects are, how to tie each to a call,
-and what each file is. Pulse's pull worker lists the store with `key_regex`, extracts the call id, and
-maps each filename to a role via `file_map`.
-
-Descriptor shape (JSON):
-```jsonc
-{
-  "bucket": "my-recordings",
-  "list_prefix": "calls/",                 // where to list
-  "key_regex": "calls/(?<call>[^/]+)/",    // MUST capture the call id in a named group
-  "id_group": "call",                       // which group holds the external call id
-  "file_map": {                             // filename (basename) -> role Pulse understands
-    "spans.json":  "otlp",                  // a saved OTLP ExportTraceServiceRequest for this call
-    "audio.wav":   "audio",                 // combined recording (stereo OR mono)
-    "caller.wav":  "audio_caller",          // separate mono, caller only
-    "agent.wav":   "audio_agent"            // separate mono, agent only
-  }
-}
-```
-
-The only valid `file_map` roles: **`otlp`**, **`audio`**, **`audio_caller`**, **`audio_agent`**
-(plus `peaks`, `segments`, `artifact_json` if the producer emits them). Do not invent roles.
-
-### OTLP histories (if saved)
-- If the producer writes each call's OTLP payload to storage, map that filename → **`otlp`**. Pulse
-  backfills by replaying it through the **same JSONata mapping** you wrote in Sections 1–12 — so the
-  archived payload must be the same dialect as live. One OTLP file per call.
-
-### Call audio — pick the role by channel layout
-This is the part the UI is picky about. Classify the recording, then choose the mapping:
-
-| What the developer has | How to represent it | Pulse layout | Diarization? |
-|---|---|---|---|
-| **Two separate mono files** (caller + agent, e.g. track egress) | two entries: `…→audio_caller`, `…→audio_agent` | separated | no |
-| **One stereo file, channels split** (ch0 caller, ch1 agent) | one `…→audio` + a `channel_map` (below) | separated | no |
-| **One stereo file, both speakers on both channels** (downmix / dual-mono) | one `…→audio` | mixed | yes (BYO) |
-| **One mono file** (single mixed channel) | one `…→audio` | mono | yes (BYO) |
-
-- **Prefer separate mono files or a split-stereo file** — those give Pulse per-speaker attribution with
-  no diarization. Mixed/mono still work but need a BYO diarization endpoint configured, or they fall
-  back to caller-only.
-- For a **split-stereo** file where you know the channel order, include a channel map so Pulse doesn't
-  have to guess roles — the UI reads exactly this shape:
-  ```json
-  "channel_map": { "0": "caller", "1": "agent" }   // channel index -> role; roles are "caller" | "agent"
-  ```
-- Pulse **auto-detects** layout (mono / separated / mixed) from the audio itself, so `channel_map` is a
-  hint that improves correctness, not a hard requirement. Never guess the channel order — omit the map
-  if the source doesn't make it clear.
-- Optional per-file fields the UI/pipeline can use when known: `sample_rate`, `channels`,
-  `t0_offset_s` (audio start relative to the call's `started_at`, for aligning waveform to the timeline).
-
-### Honesty rule (same as everywhere)
-Only describe storage the developer actually has. No archived OTLP → no `otlp` entries (live ingest
-still works). No audio → no audio entries (span metrics still work). Never fabricate a bucket, a
-key pattern, or a channel assignment.
+A mapping is ready only when all samples validate without errors, every recognized turn-stage span
+is correlated, every time unit is proven, each mapped semantic cites evidence, missing behavioral
+scenarios are disclosed, and the coverage report matches what the traces honestly support.

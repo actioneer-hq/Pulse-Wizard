@@ -16,9 +16,10 @@ export const connectPulse: Step = {
           /^https?:\/\//.test(v) ? undefined : "must start with http:// or https://",
       }));
 
-    const token = ctx.flags.token ?? (await ui.password({ message: "Ingest / API token" }));
+    const token = ctx.flags.token ?? (await ui.password({ message: "Agent ingest token" }));
+    const org = ctx.flags.org ?? "default";
 
-    const client = new PulseClient(pulseUrl, token);
+    const client = new PulseClient(pulseUrl, token, org);
     const s = ui.spinner();
     s.start("Checking Pulse…");
     const ok = await client.health();

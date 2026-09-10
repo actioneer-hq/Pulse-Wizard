@@ -10,7 +10,8 @@ Usage:
 Options:
   --repo <path>       repo to work in (default: cwd)
   --pulse-url <url>   Pulse endpoint (skips the prompt)
-  --token <token>     Pulse ingest/API token (skips the prompt)
+  --token <token>     agent ingest token (skips the prompt)
+  --org <slug>        Pulse org slug (default: default)
   --agent <id>        coding agent: claude-code | codex | acp
   --verbose           extra logging
   -h, --help          show this help
@@ -22,6 +23,7 @@ function parse(): CliFlags {
       repo: { type: "string" },
       "pulse-url": { type: "string" },
       token: { type: "string" },
+      org: { type: "string" },
       agent: { type: "string" },
       verbose: { type: "boolean" },
       help: { type: "boolean", short: "h" },
@@ -38,6 +40,7 @@ function parse(): CliFlags {
     repo: values.repo,
     pulseUrl: values["pulse-url"],
     token: values.token,
+    org: values.org,
     agent: values.agent,
     verbose: values.verbose,
   };

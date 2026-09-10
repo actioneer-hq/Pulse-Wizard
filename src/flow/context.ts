@@ -6,6 +6,7 @@ export interface CliFlags {
   repo?: string;
   pulseUrl?: string;
   token?: string;
+  org?: string; // Pulse org slug (default "default")
   agent?: string; // driver id
   verbose?: boolean;
 }

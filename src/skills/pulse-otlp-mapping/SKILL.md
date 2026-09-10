@@ -91,6 +91,8 @@ not evidence of equivalent semantics.
 Return these artifacts to the wizard:
 
 - `mapping.jsonata`: final expression only.
+- `sample-otlp.json`: the single representative producer OTLP payload you validated against (so the
+  wizard can re-validate the mapping independently).
 - `coverage.json`: validator output with available, degraded, unavailable, and untested inputs.
 - `mapping-notes.md`: concise evidence for mappings, tested scenarios, and unavailable signals.
 

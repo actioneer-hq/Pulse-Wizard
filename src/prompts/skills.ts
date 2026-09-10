@@ -1,0 +1,57 @@
+import { existsSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { WizardError } from "../util/errors.js";
+
+/** Locate a bundled skill directory (`skills/<name>` or `src/skills/<name>`) by walking up from this
+ * module — works both from source (tsx) and a built package. */
+export function skillDir(name: string): string {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 6; i++) {
+    for (const rel of [join("skills", name), join("src", "skills", name)]) {
+      const candidate = join(dir, rel);
+      if (existsSync(join(candidate, "SKILL.md"))) return candidate;
+    }
+    dir = dirname(dir);
+  }
+  throw new WizardError(`could not locate the '${name}' skill (SKILL.md not found)`);
+}
+
+/** Per-job artifact dir under the repo's gitignored .pulse/. Created if missing. */
+export async function artifactDir(repo: string, job: string): Promise<string> {
+  const dir = join(repo, ".pulse", "artifacts", job);
+  await mkdir(dir, { recursive: true });
+  return dir;
+}
+
+/** Path to a skill's validator script, if it ships one. */
+export function validatorScript(dir: string): string {
+  return join(dir, "scripts", "validate-mapping.mjs");
+}
+
+export function otlpPrompt(skill: string, repo: string, artifact: string): string {
+  return [
+    `Use the \`pulse-otlp-mapping\` Agent Skill. Read its full instructions at ${skill}/SKILL.md and`,
+    "every file it references, then follow that workflow exactly.",
+    "",
+    `Producer repo to analyze: ${repo}`,
+    `Write ALL deliverables to this artifact directory (never into the repo): ${artifact}`,
+    "",
+    "In addition to the skill's deliverables, write the single representative OTLP payload you",
+    `validated against to ${artifact}/sample-otlp.json, so it can be re-validated independently.`,
+    "Finish only when the skill's validator passes with no errors.",
+  ].join("\n");
+}
+
+export function storagePrompt(skill: string, repo: string, artifact: string): string {
+  return [
+    `Use the \`pulse-storage-mapping\` Agent Skill. Read its full instructions at ${skill}/SKILL.md and`,
+    "every file it references, then follow that workflow exactly.",
+    "",
+    `Producer repo to analyze: ${repo}`,
+    `Write ALL deliverables to this artifact directory (never into the repo): ${artifact}`,
+    "Determine caller/agent channel identity only from the repo's upload config — never guess. If it",
+    "isn't clear, omit channel_map (Pulse resolves it at runtime).",
+  ].join("\n");
+}

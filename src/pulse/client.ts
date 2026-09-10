@@ -63,4 +63,14 @@ export class PulseClient {
   async putBlobConfig(config: unknown): Promise<void> {
     await this.put("/v1/ingest/storage-config", config);
   }
+
+  /** PUT /v1/ingest/agent-meta — set the agent's inferred market use-case (framework/language are
+   * telemetry-only). Best-effort at the call site; failures shouldn't fail onboarding. */
+  async putAgentMeta(meta: {
+    use_case?: string;
+    framework?: string;
+    language?: string;
+  }): Promise<void> {
+    await this.put("/v1/ingest/agent-meta", meta);
+  }
 }

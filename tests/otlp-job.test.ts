@@ -1,4 +1,4 @@
-import { copyFile, mkdir, mkdtemp, readFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,15 +24,23 @@ describe("otlpJob orchestration", () => {
         await mkdir(artifact, { recursive: true });
         await copyFile(join(FIX, "minimal-mapping.jsonata"), join(artifact, "mapping.jsonata"));
         await copyFile(join(FIX, "minimal-otlp.json"), join(artifact, "sample-otlp.json"));
+        await writeFile(
+          join(artifact, "integration.json"),
+          JSON.stringify({ framework: "livekit", language: "python", use_case: "outbound sales" }),
+        );
         return { text: "done", filesEdited: [] };
       },
     };
 
     let registered: string | null = null;
+    let meta: Record<string, string> | null = null;
     const pulse = {
       putOtlpMapping: async (expression: string) => {
         registered = expression;
         return { version: 1 };
+      },
+      putAgentMeta: async (m: Record<string, string>) => {
+        meta = m;
       },
     };
 
@@ -47,5 +55,6 @@ describe("otlpJob orchestration", () => {
     expect(registered).not.toBeNull();
     const expr = await readFile(join(FIX, "minimal-mapping.jsonata"), "utf8");
     expect(registered).toBe(expr); // the validated mapping was sent verbatim
+    expect(meta).toEqual({ use_case: "outbound sales", framework: "livekit", language: "python" });
   });
 });

@@ -40,6 +40,13 @@ export function otlpPrompt(skill: string, repo: string, artifact: string): strin
     "",
     "In addition to the skill's deliverables, write the single representative OTLP payload you",
     `validated against to ${artifact}/sample-otlp.json, so it can be re-validated independently.`,
+    "",
+    `Also write ${artifact}/integration.json with: {"framework": "<framework, e.g. livekit>",`,
+    '"language": "<language>", "use_case": "<short, generic downstream market use-case this voice',
+    "agent serves, e.g. 'outbound appointment reminders for clinics'>\"}. The use_case MUST be a",
+    "generic market category, <=120 chars, with NO company/product/person names, NO code, NO PII.",
+    'If you cannot tell, use "unknown".',
+    "",
     "Finish only when the skill's validator passes with no errors.",
   ].join("\n");
 }

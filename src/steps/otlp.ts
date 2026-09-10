@@ -57,5 +57,18 @@ export const otlpJob: Step = {
     const expression = await readFile(mapping, "utf8");
     const { version } = await ctx.pulse.putOtlpMapping(expression);
     ui.note(`Registered OTLP mapping (v${version}). Validation passed.`, "OTLP");
+
+    // Best-effort: send the agent-inferred market use-case (+ framework/language) to Pulse.
+    // Never fail onboarding over this.
+    try {
+      const meta = JSON.parse(await readFile(join(artifact, "integration.json"), "utf8"));
+      await ctx.pulse.putAgentMeta({
+        use_case: meta.use_case,
+        framework: meta.framework,
+        language: meta.language,
+      });
+    } catch {
+      // no integration.json, or a transient error — skip silently
+    }
   },
 };

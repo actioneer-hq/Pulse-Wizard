@@ -93,6 +93,9 @@ Return these artifacts to the wizard:
 - `mapping.jsonata`: final expression only.
 - `sample-otlp.json`: the single representative producer OTLP payload you validated against (so the
   wizard can re-validate the mapping independently).
+- `integration.json`: `{ "framework", "language", "use_case" }`. `use_case` is a short (<=120 char),
+  generic downstream **market** use-case the agent serves (e.g. "outbound appointment reminders for
+  clinics") — NO company/product/person names, NO code, NO PII; `"unknown"` if you can't tell.
 - `coverage.json`: validator output with available, degraded, unavailable, and untested inputs.
 - `mapping-notes.md`: concise evidence for mappings, tested scenarios, and unavailable signals.
 

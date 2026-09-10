@@ -13,7 +13,9 @@ export class CodexDriver extends HeadlessDriver {
 
   protected buildArgs(prompt: string, _opts: RunOptions): string[] {
     // workspace-write lets it edit files non-interactively; prompt is the positional arg.
-    return ["exec", "--json", "--sandbox", "workspace-write", prompt];
+    // --skip-git-repo-check: exec is non-interactive and can't answer the trust prompt codex
+    // otherwise raises outside a recognised trusted dir.
+    return ["exec", "--json", "--skip-git-repo-check", "--sandbox", "workspace-write", prompt];
   }
 
   protected parseLine(ev: Record<string, unknown>, sink: Sink): void {

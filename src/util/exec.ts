@@ -40,8 +40,10 @@ export function exec(cmd: string, args: string[], opts: ExecOptions = {}): Promi
     child.on("close", (code) => resolve({ code: code ?? 0, stdout, stderr }));
     if (opts.input !== undefined) {
       child.stdin.write(opts.input);
-      child.stdin.end();
     }
+    // Always close stdin: some agents (e.g. `codex exec`) read stdin for extra prompt input and
+    // block forever on an open pipe that never gets EOF. We drive them purely via argv.
+    child.stdin.end();
   });
 }
 

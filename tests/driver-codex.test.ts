@@ -7,23 +7,28 @@ vi.mock("../src/util/exec.js", () => ({
   exec: vi.fn(async (cmd: string, args: string[], opts: { onStdout?: (c: string) => void }) => {
     calls.push({ cmd, args });
     const lines = `${[
+      // real codex exec --json shape: item fields sit directly on `item` (no `details` nesting)
       JSON.stringify({ type: "thread.started", thread_id: "t1" }),
       JSON.stringify({
         type: "item.started",
-        item: { details: { type: "command_execution", command: "node validate.mjs" } },
-      }),
-      JSON.stringify({
-        type: "item.completed",
         item: {
-          details: {
-            type: "file_change",
-            changes: [{ path: "/repo/.pulse/artifacts/otlp/mapping.jsonata", kind: "add" }],
-          },
+          id: "i1",
+          type: "command_execution",
+          command: "node validate.mjs",
+          status: "in_progress",
         },
       }),
       JSON.stringify({
         type: "item.completed",
-        item: { details: { type: "agent_message", text: "mapping written" } },
+        item: {
+          id: "i2",
+          type: "file_change",
+          changes: [{ path: "/repo/.pulse/artifacts/otlp/mapping.jsonata", kind: "add" }],
+        },
+      }),
+      JSON.stringify({
+        type: "item.completed",
+        item: { id: "i3", type: "agent_message", text: "mapping written" },
       }),
     ].join("\n")}\n`;
     opts.onStdout?.(lines.slice(0, 55));
@@ -49,6 +54,13 @@ describe("CodexDriver.run", () => {
 
     const { cmd, args } = calls[0]!;
     expect(cmd).toBe("codex");
-    expect(args).toEqual(["exec", "--json", "--sandbox", "workspace-write", "map it"]);
+    expect(args).toEqual([
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "workspace-write",
+      "map it",
+    ]);
   });
 });

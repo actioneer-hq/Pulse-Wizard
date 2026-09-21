@@ -26,14 +26,16 @@ const CANONICAL_SECONDS = [
 
 function usage() {
   console.error(
-    "usage: validate-mapping.mjs <mapping.jsonata> <sample-otlp.json> " +
-      "[canonical-trace.json] [coverage.json]",
+    "usage: validate-mapping.mjs <mapping.jsonata> <sample.json> " +
+      "[canonical-trace.json] [coverage.json] [otlp|json_log]",
   );
   process.exit(2);
 }
 
-const [mappingPath, samplePath, tracePath, coveragePath] = process.argv.slice(2);
+const [mappingPath, samplePath, tracePath, coveragePath, sourceKind = "otlp"] =
+  process.argv.slice(2);
 if (!mappingPath || !samplePath) usage();
+if (!["otlp", "json_log"].includes(sourceKind)) usage();
 
 const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const finite = (value) => typeof value === "number" && Number.isFinite(value);
@@ -134,6 +136,15 @@ function validate(trace) {
 }
 
 function validateInput(sample) {
+  if (sourceKind === "json_log") {
+    return (object(sample) && Object.keys(sample).length) ||
+      (Array.isArray(sample) && sample.length)
+      ? []
+      : ["JSON log input must be a non-empty object or array"];
+  }
+  if (!object(sample) || !Array.isArray(sample.resourceSpans)) {
+    return ["input must be an OTLP ExportTraceServiceRequest with resourceSpans"];
+  }
   const spans = (sample.resourceSpans ?? []).flatMap((resource) =>
     (resource.scopeSpans ?? []).flatMap((scope) => scope.spans ?? []),
   );

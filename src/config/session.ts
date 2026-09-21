@@ -24,9 +24,10 @@ export async function loadSession(repo: string): Promise<WizardSession> {
 
 export async function saveSession(repo: string, session: WizardSession): Promise<void> {
   const path = sessionPath(repo);
+  const current = await loadSession(repo);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(
     path,
-    JSON.stringify({ ...session, updatedAt: new Date().toISOString() }, null, 2),
+    JSON.stringify({ ...current, ...session, updatedAt: new Date().toISOString() }, null, 2),
   );
 }

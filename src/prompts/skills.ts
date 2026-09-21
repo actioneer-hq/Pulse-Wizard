@@ -77,7 +77,21 @@ export function storagePrompt(skill: string, repo: string, artifact: string): st
     "",
     `Producer repo to analyze: ${repo}`,
     `Write ALL deliverables to this artifact directory (never into the repo): ${artifact}`,
-    "Determine caller/agent channel identity only from the repo's upload config — never guess. If it",
-    "isn't clear, omit channel_map (Pulse resolves it at runtime).",
+    "Derive rules from source code only. Do not request bucket access, credentials, or sample objects.",
+    "Never claim a code-derived rule has been verified against live bucket contents.",
+  ].join("\n");
+}
+
+export function storageCorrectionPrompt(
+  skill: string,
+  artifact: string,
+  ruleId: string,
+  correction: string,
+): string {
+  return [
+    `Re-read ${skill}/SKILL.md and revise ${join(artifact, "storage-draft.json")}.`,
+    `The developer corrected rule ${ruleId}: ${correction}`,
+    "Inspect the producer source again. Preserve unaffected rules and IDs. Update evidence and",
+    "unresolved items. Do not register anything or seek bucket credentials.",
   ].join("\n");
 }

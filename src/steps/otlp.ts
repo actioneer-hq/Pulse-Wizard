@@ -62,8 +62,12 @@ export const otlpJob: Step = {
         if (val.code === 0) {
           const expression = await readFile(mapping, "utf8");
           const { version } = await pulse.putOtlpMapping(expression);
+          ctx.artifacts.otlp = ctx.flags.dev ? "simulated" : "registered";
           const fixes = attempt > 1 ? ` after ${attempt - 1} fix(es)` : "";
-          ui.note(`Registered OTLP mapping (v${version}). Validation passed${fixes}.`, "OTLP");
+          ui.note(
+            `${ctx.flags.dev ? "Simulated registration of" : "Registered"} OTLP mapping (v${version}). Validation passed${fixes}.`,
+            "OTLP",
+          );
           await sendAgentMeta(pulse, artifact);
           return;
         }

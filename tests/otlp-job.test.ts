@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { newContext } from "../src/flow/context.js";
+import { MockPulseClient } from "../src/pulse/mock.js";
 import { otlpJob } from "../src/steps/otlp.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -56,5 +57,36 @@ describe("otlpJob orchestration", () => {
     const expr = await readFile(join(FIX, "minimal-mapping.jsonata"), "utf8");
     expect(registered).toBe(expr); // the validated mapping was sent verbatim
     expect(meta).toEqual({ use_case: "outbound sales", framework: "livekit", language: "python" });
+  });
+
+  it("validates and simulates registration in dev mode", async () => {
+    const repo = await mkdtemp(join(tmpdir(), "pw-otlp-dev-"));
+    const artifact = join(repo, ".pulse", "artifacts", "otlp");
+    const ctx = newContext(repo, { dev: true });
+    const pulse = new MockPulseClient();
+    ctx.pulse = pulse;
+    ctx.driver = {
+      id: "codex",
+      label: "fake",
+      detect: async () => true,
+      authed: async () => true,
+      run: async () => {
+        await mkdir(artifact, { recursive: true });
+        await copyFile(join(FIX, "minimal-mapping.jsonata"), join(artifact, "mapping.jsonata"));
+        await copyFile(join(FIX, "minimal-otlp.json"), join(artifact, "sample-otlp.json"));
+        await writeFile(
+          join(artifact, "integration.json"),
+          JSON.stringify({ framework: "livekit", language: "python", use_case: "support" }),
+        );
+        return { text: "done", filesEdited: [] };
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: minimal test driver
+    } as any;
+    await otlpJob.run(ctx);
+    expect(ctx.artifacts.otlp).toBe("simulated");
+    expect(pulse.mappings).toHaveLength(1);
+    expect(pulse.agentMeta).toEqual([
+      { framework: "livekit", language: "python", use_case: "support" },
+    ]);
   });
 });

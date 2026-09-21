@@ -2,13 +2,19 @@
 
 ## Input
 
-Input is one call-sharded OTLP/JSON `ExportTraceServiceRequest`: it may contain multiple resources
+For `otlp`, input is one call-sharded OTLP/JSON `ExportTraceServiceRequest`: it may contain multiple resources
 or scopes, but every span has the same `traceId`. Protobuf must first be decoded into equivalent
 OTLP JSON. Do not assume a single `resourceSpans`, `scopeSpans`, or instrumentation scope.
 
 Attributes arrive as `{key, value}` arrays. Scalars may use `stringValue`, `intValue`,
 `doubleValue`, or `boolValue`; OTLP integers may be strings. Handle arrays and key-value lists when
 the mapped producer uses them.
+
+For `json_log`, input is one completed call's producer JSON (object or array), selected from a
+larger blob by the storage rule when necessary. Infer field meanings, units, ordering, and call/
+turn correlation from serialization and write code. Do not wrap arbitrary logs in fake OTLP
+`resourceSpans`; map their actual JSON directly into the same canonical Trace output. A
+code-derived sample tests the expression but does not prove the production bucket's contents.
 
 ## Required normalization
 

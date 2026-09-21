@@ -1,9 +1,25 @@
 import { WizardError } from "../util/errors.js";
 
+export interface PulseApi {
+  health(): Promise<boolean>;
+  putOtlpMapping(expression: string): Promise<{ version: number }>;
+  putJsonLogMapping(mapping: {
+    expression: string;
+    storage_rule_id: string;
+    sample_origin: string;
+  }): Promise<{ version: number }>;
+  putStorageManifest(manifest: unknown): Promise<void>;
+  putAgentMeta(meta: {
+    use_case?: string;
+    framework?: string;
+    language?: string;
+  }): Promise<void>;
+}
+
 /** Thin client for a running Pulse instance. Registration uses the agent's ingest token against the
  * token-authenticated `/v1/ingest/*` endpoints — the token identifies the agent, so no agent_id or
  * admin login is needed. */
-export class PulseClient {
+export class PulseClient implements PulseApi {
   private readonly baseUrl: string;
 
   constructor(
@@ -59,9 +75,18 @@ export class PulseClient {
     return (await this.put("/v1/ingest/otlp-mapping", { expression })) as { version: number };
   }
 
-  /** PUT /v1/ingest/storage-config — register blob-storage + credentials for this token's agent. */
-  async putBlobConfig(config: unknown): Promise<void> {
-    await this.put("/v1/ingest/storage-config", config);
+  /** Future Pulse endpoint: JSON log -> canonical Trace, linked to a storage rule. */
+  async putJsonLogMapping(mapping: {
+    expression: string;
+    storage_rule_id: string;
+    sample_origin: string;
+  }): Promise<{ version: number }> {
+    return (await this.put("/v1/ingest/json-log-mapping", mapping)) as { version: number };
+  }
+
+  /** Register a confirmed source-derived manifest. Pulse implements this endpoint separately. */
+  async putStorageManifest(manifest: unknown): Promise<void> {
+    await this.put("/v1/ingest/storage-manifest", manifest);
   }
 
   /** PUT /v1/ingest/agent-meta — set the agent's inferred market use-case (framework/language are

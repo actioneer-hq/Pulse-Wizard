@@ -1,5 +1,5 @@
 import type { Driver } from "../drivers/types.js";
-import type { PulseClient } from "../pulse/client.js";
+import type { PulseApi } from "../pulse/client.js";
 
 /** CLI flags parsed at entry; pre-seed the context so steps can skip prompts when provided. */
 export interface CliFlags {
@@ -9,6 +9,9 @@ export interface CliFlags {
   org?: string; // Pulse org slug (default "default")
   agent?: string; // driver id
   verbose?: boolean;
+  dev?: boolean;
+  notify?: boolean;
+  reconfigure?: boolean;
 }
 
 /** Mutable session threaded through every step. Steps read what earlier steps set and fill in more. */
@@ -16,7 +19,8 @@ export interface WizardContext {
   repoPath: string;
   flags: CliFlags;
   driver?: Driver;
-  pulse?: PulseClient;
+  pulse?: PulseApi;
+  closePulse?: () => Promise<void>;
   pulseUrl?: string;
   token?: string;
   /** Free-form bag for artifacts later steps produce (samples, generated mapping, etc.). */

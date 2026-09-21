@@ -1,0 +1,92 @@
+{
+  "manifest": {
+    "version": 1,
+    "sources": [
+      {
+        "id": "streams",
+        "provider": "s3_compatible",
+        "bucket": "confirmed-at-review",
+        "prefix": "streams/",
+        "rules": [
+          {
+            "id": "track",
+            "path_regex": "^streams/([^/]+)/track\\.[^/]+$",
+            "role": "agent_audio",
+            "decoder": "audio",
+            "call_id": { "from": "object_path", "group": 1 }
+          }
+        ]
+      },
+      {
+        "id": "facts",
+        "provider": "s3_compatible",
+        "bucket": "confirmed-at-review",
+        "prefix": "facts/",
+        "rules": [
+          {
+            "id": "snapshot",
+            "path_regex": "^facts/([^/]+)/snapshot$",
+            "role": "metadata_snapshot",
+            "decoder": "json",
+            "call_id": { "from": "object_path", "group": 1 }
+          }
+        ]
+      },
+      {
+        "id": "debug",
+        "provider": "s3_compatible",
+        "bucket": "confirmed-at-review",
+        "prefix": "debug/",
+        "rules": [
+          {
+            "id": "events",
+            "path_regex": "^debug/[^/]+/events\\.json$",
+            "role": "run_logs",
+            "decoder": "json",
+            "records_pointer": "/records",
+            "call_id": { "from": "json", "pointer": "/call_id" }
+          }
+        ]
+      },
+      {
+        "id": "bundles",
+        "provider": "s3_compatible",
+        "bucket": "confirmed-at-review",
+        "prefix": "bundles/",
+        "rules": [
+          {
+            "id": "bundle",
+            "path_regex": "^bundles/([^/]+)\\.zip$",
+            "role": "run_bundle",
+            "decoder": "opaque",
+            "container": "zip",
+            "call_id": { "from": "object_path", "group": 1 },
+            "members": [
+              {
+                "id": "segment",
+                "path_regex": "^segments/[^/]+$",
+                "role": "segment_data",
+                "decoder": "opaque",
+                "call_id": { "from": "object_path", "group": 1 }
+              },
+              {
+                "id": "index",
+                "path_regex": "^index\\.json$",
+                "role": "bundle_index",
+                "decoder": "json",
+                "call_id": { "from": "json", "pointer": "/call_id" }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keys": [
+    { "key": "streams/CALL-7/track.opus", "rule": "track", "call_id": "CALL-7" },
+    { "key": "facts/CALL-7/snapshot", "rule": "snapshot", "call_id": "CALL-7" },
+    { "key": "debug/2026-09-18/events.json", "rule": "events", "call_id": "CALL-7" },
+    { "key": "bundles/CALL-7.zip", "rule": "bundle", "call_id": "CALL-7" }
+  ],
+  "excluded": ["README"]
+}

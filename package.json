@@ -1,11 +1,19 @@
 {
-  "name": "pulse-wizard",
-  "version": "0.0.1",
-  "description": "Onboarding CLI for Pulse — wire a voice agent's OTLP + audio into a self-hosted Pulse.",
+  "name": "@actioneer/pulse-wizard",
+  "version": "0.1.0",
+  "description": "One-command onboarding for voice-agent telemetry and storage in Pulse.",
   "type": "module",
   "bin": {
     "pulse-wizard": "dist/cli.js"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Glitchcraft-Inc/Pulse-Wizard.git"
+  },
+  "license": "MIT",
   "files": ["dist", "src/skills"],
   "engines": {
     "node": ">=20"
@@ -18,6 +26,7 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "vitest run",
+    "prepublishOnly": "npm run build && npm run typecheck && npm run lint && npm test",
     "workbench:list": "node workbench/materialize.mjs --list",
     "workbench:materialize": "node workbench/materialize.mjs"
   },

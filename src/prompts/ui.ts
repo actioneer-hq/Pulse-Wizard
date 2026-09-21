@@ -37,6 +37,7 @@ function guard<T>(value: T | symbol): T {
 
 export async function select<T>(opts: {
   message: string;
+  initialValue?: T;
   options: { value: T; label: string; hint?: string }[];
 }): Promise<T> {
   return guard(await p.select(opts as never)) as T;

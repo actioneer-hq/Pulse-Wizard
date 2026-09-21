@@ -32,10 +32,24 @@ describe("PulseClient", () => {
     expect(JSON.parse(init.body as string)).toEqual({ expression: "EXPR" });
   });
 
-  it("posts storage config to /v1/ingest/storage-config", async () => {
+  it("posts storage manifest to /v1/ingest/storage-manifest", async () => {
     const calls = stubFetch(true, {});
-    await new PulseClient("http://pulse", "t").putBlobConfig({ provider: "s3_compatible" });
-    expect(calls[0]!.url).toBe("http://pulse/v1/ingest/storage-config");
+    await new PulseClient("http://pulse", "t").putStorageManifest({ version: 1, sources: [] });
+    expect(calls[0]!.url).toBe("http://pulse/v1/ingest/storage-manifest");
+  });
+
+  it("sends JSON-log mapping with its storage rule ID", async () => {
+    const calls = stubFetch(true, { version: 1 });
+    await new PulseClient("http://pulse", "t").putJsonLogMapping({
+      expression: "{}",
+      storage_rule_id: "calls-log",
+      sample_origin: "source_derived",
+    });
+    expect(calls[0]!.url).toBe("http://pulse/v1/ingest/json-log-mapping");
+    expect(JSON.parse(calls[0]!.init.body as string)).toMatchObject({
+      storage_rule_id: "calls-log",
+      sample_origin: "source_derived",
+    });
   });
 
   it("throws a WizardError on a non-ok response", async () => {

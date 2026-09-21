@@ -1,12 +1,20 @@
 import type { Step } from "../flow/step.js";
 import * as ui from "../prompts/ui.js";
 import { PulseClient } from "../pulse/client.js";
+import { LOCAL_MOCK_TOKEN, startMockPulseServer } from "../pulse/mock.js";
 
 /** Collect the Pulse endpoint + token and confirm the instance is reachable. */
 export const connectPulse: Step = {
   id: "connect-pulse",
   title: "Connect to Pulse",
   async run(ctx) {
+    if (ctx.flags.dev) {
+      const mock = await startMockPulseServer();
+      ctx.pulse = new PulseClient(mock.url, LOCAL_MOCK_TOKEN, ctx.flags.org ?? "default");
+      ctx.closePulse = mock.close;
+      ui.note("Pulse is reachable.", "Pulse");
+      return;
+    }
     const pulseUrl =
       ctx.flags.pulseUrl ??
       (await ui.text({

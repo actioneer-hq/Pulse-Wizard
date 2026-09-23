@@ -2,10 +2,10 @@ import { resolve } from "node:path";
 import { PULSE_SETUP_PROMPT, detectSetupAdapters } from "../adapters/registry.js";
 import { systemRuntime } from "../adapters/runtime.js";
 import type { AdapterRuntime, DetectedAdapter, SetupAdapterId } from "../adapters/types.js";
+import type { CliFlags } from "../config/flags.js";
 import { init } from "../config/init.js";
 import { installLocalFiles } from "../config/localFiles.js";
 import { loadSession, saveSession } from "../config/session.js";
-import type { CliFlags } from "../flow/context.js";
 import * as ui from "../prompts/ui.js";
 import { WizardError } from "../util/errors.js";
 

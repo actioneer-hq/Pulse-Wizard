@@ -4,3 +4,4 @@ dist
 .DS_Store
 .pulse/
 workbench/checkouts/
+actioneer-pulse-wizard-*.tgz

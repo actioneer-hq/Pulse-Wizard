@@ -131,10 +131,10 @@ describe("one-command setup", () => {
     expect(runtime.calls[0]?.command).toBe("codex");
     expect(runtime.calls[0]?.args).toEqual([PULSE_SETUP_PROMPT]);
     expect(
-      await readFile(join(repo, ".agents/skills/pulse-otlp-mapping/SKILL.md"), "utf8"),
-    ).toContain("Map voice-agent signals into Pulse");
+      await readFile(join(repo, ".agents/skills/pulse-integration-mapping/SKILL.md"), "utf8"),
+    ).toContain("Connect a voice agent to Pulse");
     expect(await readFile(join(repo, ".git/info/exclude"), "utf8")).toContain(
-      "/.agents/skills/pulse-otlp-mapping/",
+      "/.agents/skills/pulse-integration-mapping/",
     );
     expect(ui.select).not.toHaveBeenCalled();
   });

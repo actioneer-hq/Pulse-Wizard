@@ -113,12 +113,15 @@ export async function installLocalFiles(
   skillHomes: string[],
   supportFiles: GeneratedSupportFile[],
 ): Promise<string | undefined> {
-  const skillPaths = skillHomes.flatMap((home) =>
+  const legacySkillPaths = skillHomes.flatMap((home) =>
     ["pulse-otlp-mapping", "pulse-storage-mapping"].map((name) => join(home, name)),
+  );
+  const skillPaths = skillHomes.flatMap((home) =>
+    ["pulse-integration-mapping"].map((name) => join(home, name)),
   );
   const supportPaths = supportFiles.map((file) => file.path);
   const generatedPaths = [...skillPaths, ...supportPaths];
-  await assertLocalPathsUntracked(repo, [".pulse", ...generatedPaths]);
+  await assertLocalPathsUntracked(repo, [".pulse", ...legacySkillPaths, ...generatedPaths]);
   await ensureLocalExcludes(repo, [
     ".pulse/",
     ...skillPaths.map((path) => `${path}/`),
@@ -137,11 +140,16 @@ export async function installLocalFiles(
     await backupPath(repo, path, backupRoot);
   };
 
+  for (const targetRelative of legacySkillPaths) {
+    const target = join(repo, targetRelative);
+    if (await exists(target)) {
+      await backup(target);
+      await rm(target, { recursive: true, force: true });
+    }
+  }
+
   for (const targetRelative of skillPaths) {
-    const name = targetRelative.endsWith("pulse-otlp-mapping")
-      ? "pulse-otlp-mapping"
-      : "pulse-storage-mapping";
-    const source = skillDir(name);
+    const source = skillDir("pulse-integration-mapping");
     const target = join(repo, targetRelative);
     const sourceHash = await hashDirectory(source);
     const targetHash = (await exists(target)) ? await hashDirectory(target) : undefined;

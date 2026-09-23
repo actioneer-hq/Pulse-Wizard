@@ -1,59 +1,24 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PulseClient } from "../src/pulse/client.js";
+import { manifest } from "./helpers.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
-function stubFetch(ok: boolean, body: unknown) {
-  const calls: { url: string; init: RequestInit }[] = [];
-  vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
-    calls.push({ url, init });
-    return {
-      ok,
-      status: ok ? 200 : 422,
-      json: async () => body,
-      text: async () => JSON.stringify(body),
-    } as unknown as Response;
-  });
-  return calls;
-}
-
 describe("PulseClient", () => {
-  it("PUTs the mapping to /v1/ingest with token + org headers", async () => {
-    const calls = stubFetch(true, { version: 3 });
-    const res = await new PulseClient("http://pulse/", "vo_tok", "acme").putOtlpMapping("EXPR");
-
-    expect(res.version).toBe(3);
-    const { url, init } = calls[0]!;
-    expect(url).toBe("http://pulse/v1/ingest/otlp-mapping");
-    expect(init.method).toBe("PUT");
-    const headers = init.headers as Record<string, string>;
-    expect(headers.authorization).toBe("Bearer vo_tok");
-    expect(headers["x-voiceobs-org"]).toBe("acme");
-    expect(JSON.parse(init.body as string)).toEqual({ expression: "EXPR" });
-  });
-
-  it("posts storage manifest to /v1/ingest/storage-manifest", async () => {
-    const calls = stubFetch(true, {});
-    await new PulseClient("http://pulse", "t").putStorageManifest({ version: 1, sources: [] });
-    expect(calls[0]!.url).toBe("http://pulse/v1/ingest/storage-manifest");
-  });
-
-  it("sends JSON-log mapping with its storage rule ID", async () => {
-    const calls = stubFetch(true, { version: 1 });
-    await new PulseClient("http://pulse", "t").putJsonLogMapping({
-      expression: "{}",
-      storage_rule_id: "calls-log",
-      sample_origin: "source_derived",
+  it("registers the unified manifest with token and org headers", async () => {
+    const calls: Array<{ url: string; options: RequestInit }> = [];
+    vi.stubGlobal("fetch", async (url: string, options: RequestInit) => {
+      calls.push({ url, options });
+      return new Response("{}", { status: 200 });
     });
-    expect(calls[0]!.url).toBe("http://pulse/v1/ingest/json-log-mapping");
-    expect(JSON.parse(calls[0]!.init.body as string)).toMatchObject({
-      storage_rule_id: "calls-log",
-      sample_origin: "source_derived",
+    await new PulseClient("https://pulse.example/", "token", "acme").putIntegrationManifest(
+      manifest(),
+    );
+    expect(calls[0]?.url).toBe("https://pulse.example/v1/ingest/integration-manifest");
+    expect(calls[0]?.options.method).toBe("PUT");
+    expect(calls[0]?.options.headers).toMatchObject({
+      authorization: "Bearer token",
+      "x-voiceobs-org": "acme",
     });
-  });
-
-  it("throws a WizardError on a non-ok response", async () => {
-    stubFetch(false, { detail: "nope" });
-    await expect(new PulseClient("http://pulse", "t").putOtlpMapping("x")).rejects.toThrow(/422/);
   });
 });

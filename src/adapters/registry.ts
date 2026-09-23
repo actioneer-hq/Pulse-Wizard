@@ -117,7 +117,7 @@ class IdeAdapter implements SetupAdapter {
 }
 
 const SETUP_INSTRUCTION =
-  "Read .pulse/SETUP.md and both Pulse skills under .agents/skills/, then use pulse-otlp-mapping and pulse-storage-mapping to connect this repository to Pulse. Ask me to confirm every storage finding.";
+  "Read .pulse/SETUP.md and use the pulse-integration-mapping skill to connect this voice-agent repository to Pulse.";
 
 function appPaths(name: string): string[] {
   return [`/Applications/${name}.app`, join(homedir(), "Applications", `${name}.app`)];

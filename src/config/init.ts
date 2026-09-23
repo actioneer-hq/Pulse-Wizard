@@ -1,6 +1,7 @@
 import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type { GeneratedSupportFile } from "../adapters/types.js";
+import { CANONICAL_CONTRACT } from "../integration/contract.js";
 import { skillDir } from "../prompts/skills.js";
 import * as ui from "../prompts/ui.js";
 import { PulseClient } from "../pulse/client.js";
@@ -26,9 +27,19 @@ export async function refreshSkills(repoArg: string): Promise<void> {
   const repo = resolve(repoArg);
   if (!(await exists(repo))) throw new WizardError(`repo not found: ${repo}`);
   const backup = await installLocalFiles(repo, [".agents/skills", ".claude/skills"], []);
+  await writeCanonicalContract(repo);
   ui.note(
     backup ? `Updated Pulse skills. Previous copies: ${backup}` : "Pulse skills are current.",
     "Pulse",
+  );
+}
+
+async function writeCanonicalContract(repo: string): Promise<void> {
+  const contracts = join(repo, ".pulse", "contracts");
+  await mkdir(contracts, { recursive: true });
+  await writeFile(
+    join(contracts, "canonical.json"),
+    `${JSON.stringify(CANONICAL_CONTRACT, null, 2)}\n`,
   );
 }
 
@@ -48,7 +59,7 @@ async function optionalConfig(repo: string): Promise<LocalConfig | undefined> {
 }
 
 function wizardCommand(): string {
-  const root = dirname(dirname(dirname(skillDir("pulse-otlp-mapping"))));
+  const root = dirname(dirname(dirname(skillDir("pulse-integration-mapping"))));
   const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
   return process.argv[1]?.endsWith(".ts")
     ? `npm --prefix ${quote(root)} run dev --`
@@ -105,6 +116,7 @@ export async function init(
     mode: 0o600,
   });
   await chmod(join(dir, "config.json"), 0o600);
+  await writeCanonicalContract(repo);
   const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
   const wizard = wizardCommand();
   const target = `--repo ${quote(repo)}`;
@@ -113,26 +125,26 @@ export async function init(
     [
       "# Pulse setup",
       "",
-      "Open your coding agent in this repository and ask:",
-      "Connect this voice-agent application to Pulse observability using pulse-otlp-mapping and pulse-storage-mapping.",
-      "Inspect application producers; .pulse/ is Wizard working state, not producer evidence.",
-      "Inspect voice telemetry and blob storage together. If usable OTLP and call-linked JSON logs both exist, ask me which primary source to map. If voice spans lack an exporter, ask before adding one.",
-      "Assume I know my application and storage, not Pulse internals. Ask about my deployment in plain language: where calls are saved, which files and layouts are active, and who speaks on each audio channel. Derive Pulse prefixes, regexes, rules, and credential mappings yourself; ask me to correct factual mistakes, not to design the manifest.",
-      "Do not ask me to confirm known credential-label mappings. Apply them directly, including HMAC access ID -> access_key_id and HMAC secret -> secret_access_key. Ask only when a provider-specific label or authentication method is genuinely unknown.",
-      "Keep every needed confirmation short and focused on one decision. Use the agent's selectable question UI when available, with 2-3 concise, evidence-based choices and a way to give a custom written answer.",
-      "If selectable questions are unavailable, show numbered choices and accept either a number or a custom answer. Ask for brief free text only when the answer cannot sensibly be offered as choices, such as a bucket name.",
+      "Connect this voice-agent application to Pulse observability using pulse-integration-mapping.",
+      "Read .agents/skills/pulse-integration-mapping/SKILL.md and every reference it requires.",
+      "Read .pulse/contracts/canonical.json. It is the authoritative definition of Pulse's three atomic evidence families: Trace/OTLP, Audio, and Transcript.",
+      "Treat application source as truth. .pulse/ is ignored Wizard state and never producer evidence.",
+      "Work backward from every canonical field to its application producer, serializer, exporter or stored object. File names, extensions and formats do not determine relevance.",
+      "Evaluate every deterministic section of each source. One file may provide Trace, Transcript and call metadata through separate mappers.",
+      "If multiple valid sources provide the same fields, ask me to select one primary source for only those overlapping fields; preserve unique fields from every source.",
+      "Write mapping-plan.json with exact source formats and complete canonical-field decisions before writing manifest.json or any mapper.",
+      "Ignore summaries, RCA outputs, classifications and aggregate analytics that add no atomic canonical fact. Never emit derived metrics: producer-reported numbers ride span attrs from the contract's span_attr_vocabulary, already converted to canonical units.",
+      "Evidence is nullable; nothing is invented. A source with no clock emits null times plus sequence (source order); untimed transcripts and spans are first-class. Prove every time unit from the code that writes the number and record unit_evidence on the projection.",
+      "Do not request live bucket access, sample objects, credentials, or credential-label confirmation. Infer provider schemas and normalized field mappings from source; Pulse collects values and tests the connection later.",
+      "Ask only short deployment-fact or duplicate-source questions that source cannot resolve. Prefer 2-3 selectable options plus a custom answer.",
+      "If voice spans exist but have no exporter, ask before changing application source. Do not add missing voice instrumentation.",
       "",
-      "Both skills are installed locally. Read their SKILL.md files before acting.",
       "The wizard CLI owns .pulse/config.json; do not print or copy its token.",
-      "Run these commands from this repo when the skills request validation or registration:",
+      "Write the final contract under .pulse/artifacts/integration/. Validate in a loop, then register:",
       "",
       "```sh",
-      `${wizard} validate-storage ${target}`,
-      `${wizard} register-storage ${target} --confirmed`,
-      `${wizard} validate-trace-mapping ${target}`,
-      `${wizard} register-trace-mapping ${target}`,
-      `${wizard} validate-otlp ${target}  # legacy OTLP alias`,
-      `${wizard} register-otlp ${target}  # legacy OTLP alias`,
+      `${wizard} validate-integration ${target}`,
+      `${wizard} register-integration ${target}`,
       "```",
       "",
     ].join("\n"),

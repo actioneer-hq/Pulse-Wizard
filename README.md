@@ -1,38 +1,28 @@
 # Pulse Wizard
 
-Onboarding CLI for [Pulse](https://github.com/Glitchcraft-Inc/Actioneer-Pulse) — wires a voice
-agent's telemetry into a self-hosted Pulse instance.
-
-One command configures both parts of a complete Pulse integration:
-
-- **OTLP** — launches your locally authenticated coding agent to generate a
-  JSONata mapping from your producer's OTLP spans to Pulse's canonical shape, then registers it.
-  The wizard never touches model keys; it uses the agent's own auth.
-- **Storage** — inspects your upload code for recordings, archived OTLP, JSON artifacts, and ZIP
-  members. You confirm each inferred rule before a versioned manifest is registered. No bucket
-  credentials or sample objects are needed for discovery.
-
-The Wizard uses your locally authenticated coding agent; it does not run a hosted model or ask for
-its API key. Storage rules are derived from code and confirmed by you, not verified against live
-bucket contents. Bucket access setup remains a separate Pulse concern.
+One-command onboarding from a voice-agent repository to Pulse. The Wizard initializes a private
+local workspace, installs one integration skill, and opens the developer's local coding agent with
+the setup prompt already submitted.
 
 ## Quick start
 
-1. Start or deploy Pulse and note its public URL.
-2. In Pulse, select your organization, open **Settings → Agents**, create an agent, and mint an
-   ingest token. Copy the token when shown; it is displayed only once.
-3. From the root of your voice-agent repository, run:
+1. Deploy Pulse at a public URL.
+2. In Pulse, add an agent to your organization and mint its ingest token.
+3. From the voice-agent repository, run:
 
    ```bash
    npx @actioneer/pulse-wizard@latest
    ```
 
-The Wizard asks for the Pulse URL and token, detects the supported coding agents and IDEs installed
-on the machine, and lets the developer choose one. Terminal agents open with the Pulse setup prompt
-already submitted. Cursor and Windsurf receive a local `/pulse-setup` command and open the repository
-with a one-line instruction.
+Enter the Pulse URL and token, then choose a detected coding agent or IDE. Claude Code, Codex,
+OpenCode, Cursor Agent, and Gemini CLI open directly with the prompt preloaded. Cursor and Windsurf
+open the repository with a local `/pulse-setup` command ready to run.
 
-Supported in the first release:
+The agent works backward from Pulse's canonical Trace, Audio, and Transcript models, declares each
+selected source's exact format, validates its mappers against expected canonical output, and
+registers the result. It does not need bucket access, production samples, calls, or credentials.
+
+## Supported launchers
 
 - Claude Code
 - Codex
@@ -41,68 +31,61 @@ Supported in the first release:
 - Gemini CLI
 - Windsurf
 
-Pulse stores its token in `.pulse/config.json` with mode `0600` and keeps generated artifacts under
-`.pulse/`. Wizard-generated skills and IDE commands are excluded through Git's local exclude file,
-so setup does not dirty the repository. Run with `--reconfigure` to replace a saved URL or token.
+For another coding harness, initialize the repository and submit the generated instruction:
 
-## Develop
+```bash
+npx @actioneer/pulse-wizard@latest init
+```
+
+Then ask the agent: `Read .pulse/SETUP.md and complete the Pulse setup.`
+
+## Local state
+
+Wizard state lives under `.pulse/` and is excluded locally from Git. `.pulse/config.json` stores
+the Pulse URL and ingest token with mode `0600`. Generated skills and IDE commands are also locally
+excluded so setup does not dirty the target repository.
+
+`.pulse/contracts/canonical.json` contains the versioned Trace/OTLP, Audio, and Transcript models
+the coding agent must map to. Mapper fixtures use a standard `_pulse` runtime context plus decoded
+`data`; validation rejects hardcoded synthetic call IDs.
+
+The integration contract is written to:
+
+```text
+.pulse/artifacts/integration/
+  manifest.json
+  mapping-plan.json
+  coverage.json
+  fixtures/<source-id>/<case-id>.json
+```
+
+The registered contract uses `PUT /v1/ingest/integration-manifest`. Validation always runs again
+immediately before registration.
+
+## Development
 
 ```bash
 npm install
-npm run dev            # run from source (tsx)
-npm run build          # bundle to dist/ (tsup)
-npm test               # vitest
-npm run lint           # biome
-npm run typecheck      # tsc --noEmit
-npm run workbench:list # list pinned real-world test cases
-```
-
-## Run
-
-```bash
-# From the Pulse Wizard checkout; dev mode needs no Pulse URL or token:
 npm run dev -- --repo /path/to/voice-agent --dev
+npm run typecheck
+npm run lint
+npm test
+npm run build
 ```
 
-The selected agent inspects live OTLP and call-linked blob logs, asks which primary source to use
-when both exist, and asks permission before wiring a missing OTLP exporter. The ignored
-`.pulse/SETUP.md` contains exact, version-pinned validation and registration commands. The old
-subprocess-driven TUI remains available as `pulse-wizard run` during migration.
-
-After updating Wizard, run
-`npx @actioneer/pulse-wizard@latest refresh-skills --repo <target>` to replace previously installed
-Pulse skills. It backs up existing copies under the target's ignored `.pulse/` directory and leaves
-its connection config untouched. Restart the coding agent to load the new instructions.
-
-Artifacts are written under `<repo>/.pulse/artifacts/`. The storage draft retains source evidence;
-the confirmed `storage-manifest.json` contains only runtime fields. Production registration uses
-`PUT /v1/ingest/storage-manifest` (manifest v1); Pulse must implement that endpoint before a
-production storage run can complete. Dev mode sends the same HTTP requests to a short-lived
-loopback mock; it does not verify production backend acceptance. If a skill lacks enough source
-evidence, the run reports incomplete instead of claiming a working integration.
-
-Trace mappings use `mapping-source.json` to distinguish `otlp` from `json_log`. The latter maps
-source JSON directly to Pulse's canonical Trace and must reference a confirmed `kind: "log"`
-storage rule. `validate-trace-mapping` checks either mode locally; the old `validate-otlp` and
-`register-otlp` remain OTLP-compatible aliases. Production JSON-log registration targets
-`PUT /v1/ingest/json-log-mapping`, which Pulse must implement separately. A source-derived
-sample validates the expression but is not proof of deployed bucket contents.
+`--dev` skips the Pulse URL and token and registers against a short-lived loopback mock while
+keeping the same validation and HTTP flow.
 
 ## Layout
 
-```
+```text
 src/
-  cli.ts          entry (arg parsing)
-  adapters/       interactive terminal and IDE launch adapters
-  setup/          one-command setup orchestration
-  index.ts        run() — programmatic entry
-  flow/           step orchestration (context, step, run)
-  steps/          guided stages (select agent, connect, OTLP, storage, outro)
-  drivers/        coding-agent abstraction (Driver) + headless + ACP + registry
-  pulse/          PulseClient (Pulse API)
-  prompts/        @clack/prompts wrapper
-  config/         session persistence
-  util/           exec, log, errors
-  skills/         OTLP and blob-storage Agent Skills bundled as progressive context
-workbench/        pinned real-world repos for end-to-end wizard testing
+  adapters/      coding-agent and IDE launch adapters
+  commands/      local validation and registration commands
+  config/        private initialization and generated-file management
+  integration/   manifest, canonical models, and deterministic validator
+  pulse/         production API client and development mock
+  setup/         one-command setup orchestration
+  skills/        bundled pulse-integration-mapping skill
+workbench/       pinned real-world repositories for manual end-to-end testing
 ```

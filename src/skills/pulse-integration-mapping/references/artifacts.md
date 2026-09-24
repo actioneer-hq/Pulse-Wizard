@@ -70,8 +70,11 @@ mapper outputs are arrays of canonical fragments.
 
 ## Manifest
 
-Use schema `pulse.integration`, version `1`. Preserve provider-native connections and normalized
-credential labels without values. Each mapper declares:
+Use schema `pulse.integration`, version `1`. Set the required `ingest_method`
+(`telemetry_ingest_event` | `storage_polling` | `not_applicable_no_logs`) to the ingest shape you
+classified up front; it must agree with the manifest body (pull carries artifacts, push carries a
+ready live OTLP mapper and no artifacts, "no logs" carries neither). Preserve provider-native
+connections and normalized credential labels without values. Each mapper declares:
 
 ```json
 {

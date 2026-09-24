@@ -30,9 +30,20 @@ export type ContainerType = (typeof CONTAINERS)[number];
 export type CanonicalTarget = (typeof TARGETS)[number];
 export type MapperTarget = Exclude<CanonicalTarget, "audio">;
 
+export const INGEST_METHODS = [
+  "telemetry_ingest_event",
+  "storage_polling",
+  "not_applicable_no_logs",
+] as const;
+export type IngestMethod = (typeof INGEST_METHODS)[number];
+
 export interface IntegrationManifest {
   schema: "pulse.integration";
   version: 1;
+  // How this agent's telemetry reaches Pulse — the routing decision the agent classifies first:
+  // telemetry_ingest_event (OTLP push), storage_polling (Pulse sweeps the store), or
+  // not_applicable_no_logs (nothing to ingest — the producer records no usable telemetry).
+  ingest_method: IngestMethod;
   integration: {
     framework: string;
     language: string;
@@ -644,6 +655,7 @@ export function validateManifest(value: unknown): IntegrationManifest {
     [
       "schema",
       "version",
+      "ingest_method",
       "integration",
       "live_telemetry",
       "connections",
@@ -656,6 +668,7 @@ export function validateManifest(value: unknown): IntegrationManifest {
   if (manifest.schema !== "pulse.integration" || manifest.version !== 1) {
     throw new WizardError("manifest requires schema pulse.integration version 1");
   }
+  const ingestMethod = enumValue(manifest.ingest_method, INGEST_METHODS, "ingest_method");
   const integration = record(manifest.integration, "integration");
   onlyKeys(integration, ["framework", "language", "use_case"], "integration");
   const live = record(manifest.live_telemetry, "live_telemetry");
@@ -728,6 +741,25 @@ export function validateManifest(value: unknown): IntegrationManifest {
     }
   }
 
+  // ingest_method must agree with what the manifest actually carries — only the pull path maps
+  // stored artifacts; push routes through live OTLP; "no logs" carries neither.
+  if (ingestMethod === "storage_polling" && artifacts.length === 0) {
+    throw new WizardError("storage_polling requires at least one mapped artifact");
+  }
+  if (ingestMethod === "telemetry_ingest_event") {
+    if (liveStatus !== "ready") {
+      throw new WizardError(
+        "telemetry_ingest_event requires ready live telemetry (an OTLP mapper)",
+      );
+    }
+    if (artifacts.length > 0) {
+      throw new WizardError("telemetry_ingest_event must not map stored artifacts");
+    }
+  }
+  if (ingestMethod === "not_applicable_no_logs" && artifacts.length > 0) {
+    throw new WizardError("not_applicable_no_logs must not map stored artifacts");
+  }
+
   const capabilitiesRaw = record(manifest.expected_capabilities, "expected_capabilities");
   const expected_capabilities = Object.fromEntries(
     Object.entries(capabilitiesRaw).map(([name, raw]) => {
@@ -759,6 +791,7 @@ export function validateManifest(value: unknown): IntegrationManifest {
   return {
     schema: "pulse.integration",
     version: 1,
+    ingest_method: ingestMethod,
     integration: {
       framework: nonempty(integration.framework, "integration.framework", 128),
       language: nonempty(integration.language, "integration.language", 64),

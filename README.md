@@ -39,6 +39,22 @@ npx @actioneer/pulse-wizard@latest init
 
 Then ask the agent: `Read .pulse/SETUP.md and complete the Pulse setup.`
 
+### Running from source (no npm package)
+
+If the npm package isn't available yet, run the Wizard straight from source. From inside your
+voice-agent repository, this single command clones + builds the Wizard once and runs `init` against
+the current repo (exactly what `npx @actioneer/pulse-wizard@latest init` does):
+
+```bash
+git clone https://github.com/Glitchcraft-Inc/Pulse-Wizard.git /tmp/pulse-wizard \
+  && npm --prefix /tmp/pulse-wizard install \
+  && npm --prefix /tmp/pulse-wizard run build \
+  && node /tmp/pulse-wizard/dist/cli.js init --repo "$(pwd)"
+```
+
+Drop `init` to get the full interactive `setup` flow instead. `/tmp/pulse-wizard` is a throwaway
+checkout — delete it (or re-clone) whenever you want the latest.
+
 ## Local state
 
 Wizard state lives under `.pulse/` and is excluded locally from Git. `.pulse/config.json` stores

@@ -11,6 +11,7 @@ export function manifest(): IntegrationManifest {
   return {
     schema: "pulse.integration",
     version: 1,
+    ingest_method: "storage_polling",
     integration: { framework: "custom", language: "python", use_case: "support calls" },
     live_telemetry: {
       status: "unavailable",

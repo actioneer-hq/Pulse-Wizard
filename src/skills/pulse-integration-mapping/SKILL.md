@@ -20,6 +20,22 @@ structure it guarantees (delimiters, escaping, ordering, optional sections, inva
 express the extraction as a mapper into the canonical shape. A format you have never seen is not
 an obstacle; it is the normal case.
 
+Before mapping anything, classify **how** this producer's telemetry reaches Pulse — the manifest's
+required `ingest_method`, and the first thing to settle because it decides what the rest of the work
+even is:
+
+- `telemetry_ingest_event` — the app emits OTLP spans live (an exporter is wired, or trivially can
+  be). Pulse receives the push; the manifest carries the OTLP-to-trace mapper, not stored artifacts.
+- `storage_polling` — the app persists telemetry to a store (blob, DB, logs) with no live exporter.
+  Pulse can only poll it; the manifest carries the storage connections, selectors, and mappers that
+  turn those artifacts into the canonical model. This is the default when facts live at rest.
+- `not_applicable_no_logs` — the app records no usable telemetry anywhere. There is nothing to map;
+  say so plainly and direct the developer to add telemetry first, rather than inventing a mapping.
+
+Decide this from what the code actually does (does it export, or persist, or neither?), not from
+what would be convenient. The value must agree with the manifest: pull carries artifacts, push
+carries a ready OTLP mapper and none, "no logs" carries neither.
+
 Read [references/artifacts.md](references/artifacts.md) before writing integration artifacts and
 [references/validation.md](references/validation.md) before creating cases or running validation.
 

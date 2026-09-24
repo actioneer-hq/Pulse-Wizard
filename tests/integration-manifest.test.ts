@@ -13,6 +13,30 @@ describe("integration manifest", () => {
     });
   });
 
+  it("accepts and preserves the ingest_method", () => {
+    expect(validateManifest(manifest()).ingest_method).toBe("storage_polling");
+  });
+
+  it("rejects an unknown ingest_method", () => {
+    const value = manifest() as unknown as Record<string, unknown>;
+    value.ingest_method = "carrier_pigeon";
+    expect(() => validateManifest(value)).toThrow(/ingest_method is unsupported/);
+  });
+
+  it("rejects storage_polling with no artifacts", () => {
+    const value = manifest();
+    value.artifacts = [];
+    value.connections = [];
+    value.mappers = {};
+    expect(() => validateManifest(value)).toThrow(/storage_polling requires at least one/);
+  });
+
+  it("rejects telemetry_ingest_event that maps stored artifacts", () => {
+    const value = manifest();
+    value.ingest_method = "telemetry_ingest_event";
+    expect(() => validateManifest(value)).toThrow(/telemetry_ingest_event/);
+  });
+
   it("rejects the discarded kind-based format", () => {
     const value = manifest() as unknown as Record<string, unknown>;
     const artifacts = value.artifacts as Array<Record<string, unknown>>;
